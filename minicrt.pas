@@ -74,6 +74,8 @@ unit minicrt;
 //   Ctrl/Alt + PageUp/PageDown are incorrect in qterminal
 //   Ctrl/Alt + Home/End are incorrect in lxterminal
 //   Ctrl/Alt + Ins/Del/Home/End/PgUp/PgDn are incorrect in linux tty
+//   Ctrl+Alt + A..Z only work on Linux (except C, S, V in urxvt)
+//   Ctrl+Shift + A..Z only work on Windows
 
 // What does appear to work universally?
 //   Cursor keys and numpad directions
@@ -85,7 +87,6 @@ unit minicrt;
 //   Alt + A..Z (unless a terminal window's own menus intercept it)
 //     (on xterm, altSendsEscape must be true)
 //   Alt + 0..9
-//   Ctrl+Alt + A..Z (except C, S, V in urxvt)
 
 // ------------------------------------------------------------------
 interface
@@ -1087,7 +1088,9 @@ end;
 
 {$HINTS OFF} // fpc complains about the parameters being unused...
 procedure sigwinchHandler(sig : longint; psi : PSigInfo; psc : PSigContext); cdecl;
-// Callback for SIGWINCHes.
+// Callback for SIGWINCHes. This doesn't seem safe to use however, if there
+// is any significant drawing to the screen happening, since the callback may
+// occur during write operations, and that tends to end in a crash. :(
 var oldx, oldy, x, y : dword;
 begin
  if NewConSizeCallback <> NIL then begin
