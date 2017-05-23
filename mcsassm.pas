@@ -146,7 +146,9 @@ type // Resource types
 
      DATtype = record
        filenamu : UTF8string;
+       bannerofs : dword;
        projectname : UTF8string;
+       projectdesc : UTF8string;
        gameversion : UTF8string;
      end;
 
@@ -196,6 +198,7 @@ function CompressScripts(poku : ppointer) : dword;
 function CompressStringTable(poku : ppointer; langindex : dword) : dword;
 function DecompressScripts(poku : pointer; blocksize : dword) : boolean;
 function DecompressStringTable(poku : pointer; blocksize : dword) : boolean;
+function ReadDATHeader(var dest : DATtype; var filu : file) : byte;
 function LoadDAT(const filunamu : UTF8string) : byte;
 procedure UnloadDATs;
 
@@ -1887,6 +1890,73 @@ begin
  DecompressStringTable := TRUE;
 end;
 
+function ReadDATHeader(var dest : DATtype; var filu : file) : byte;
+// Attempts to read the header of a .DAT resource pack. The file name must be
+// preset in the given DATtype record, and the file handle should be just
+// an unopened file.
+// If failed, returns an error number, and an error message is placed in
+// asman_errormsg, and the file handle won't be valid.
+// If successful, returns 0. The header content is placed in the given
+// DATtype record. The caller can continue reading the file contents using
+// the same file handle. The caller is responsible for closing the file.
+var ivar : dword;
+begin
+ ReadDATHeader := 0;
+ while IOresult <> 0 do ; // flush
+
+ // Open the DAT file, prepare to start reading resources
+ assign(filu, dest.filenamu);
+ filemode := 0; reset(filu, 1); // read-only
+ ivar := IOresult;
+ if ivar <> 0 then begin
+  ReadDATHeader := byte(ivar);
+  asman_errormsg := errortxt(ivar);
+  exit;
+ end;
+ blockread(filu, ivar, 4);
+ if ivar <> $CACABAAB then begin // SuperSakura signature
+  close(filu);
+  ReadDATHeader := 97;
+  asman_errormsg := dest.filenamu + ' is missing SuperSakura DAT signature';
+  exit;
+ end;
+
+ // ----- Reading Resources -----
+ // HEADER (sig DWORD, header length DWORD, header data)
+ ivar := 0;
+ blockread(filu, ivar, 1);
+ if ivar <> 3 then begin
+  close(filu);
+  ReadDATHeader := 97;
+  asman_errormsg := 'Incorrect DAT format version: ' + strdec(ivar);
+  exit;
+ end;
+
+ // Read the banner image offset.
+ blockread(filu, dest.bannerofs, 4);
+
+ // Read the project name.
+ blockread(filu, ivar, 1);
+ setlength(dest.projectname, ivar);
+ if ivar <> 0 then blockread(filu, dest.projectname[1], ivar);
+
+ // Read the project description.
+ blockread(filu, ivar, 1);
+ setlength(dest.projectdesc, ivar);
+ if ivar <> 0 then blockread(filu, dest.projectdesc[1], ivar);
+
+ // Read the game version.
+ blockread(filu, ivar, 1);
+ setlength(dest.gameversion, ivar);
+ if ivar <> 0 then blockread(filu, dest.gameversion[1], ivar);
+
+ ivar := IOresult;
+ if ivar <> 0 then begin
+  ReadDATHeader := byte(ivar);
+  asman_errormsg := errortxt(ivar);
+ end;
+end;
+
 function LoadDAT(const filunamu : UTF8string) : byte;
 // Attempts to load a .DAT resource pack. Returns 0 if successful, otherwise
 // returns an error number and an error message is placed in asman_errormsg.
@@ -1898,13 +1968,12 @@ var filu : file;
     PNGswap : PNGtype;
     PNGpoku : pPNGtype;
     swaps : string;
-    versu : byte;
     opresult, revivethread : boolean;
 begin
  LoadDAT := 0;
  opresult := TRUE;
  // just to eliminate compiler warnings
- swaps := ''; versu := 0;
+ swaps := ''; assign(filu, '');
  blocksize := 0; blockID := 0;
 
  asman_errormsg := '';
@@ -1913,6 +1982,8 @@ begin
   asman_errormsg := 'LoadDAT: No filename given';
   exit;
  end;
+
+ writelog('Loading dat ' + filunamu);
 
  // We have to shut down the cacher thread for a bit... this will require
  // moving stuff around in memory and we don't want access conflicts.
@@ -1924,57 +1995,20 @@ begin
  datindex := length(datlist);
  setlength(datlist, datindex + 1);
  datlist[datindex].filenamu := filunamu;
- writelog('Loading dat ' + filunamu);
 
- // Open the DAT file, prepare to start reading resources
- assign(filu, filunamu);
- filemode := 0; reset(filu, 1); // read-only
- ivar := IOresult;
- if ivar <> 0 then begin
-  LoadDAT := byte(ivar);
-  case ivar of
-   2: asman_errormsg := 'File ' + filunamu + ' not found';
-   3: asman_errormsg := 'Path to file ' + filunamu + ' not found';
-   5: asman_errormsg := 'Access denied trying to read ' + filunamu;
-   else asman_errormsg := 'IO error ' + strdec(ivar) + ' trying to open ' + filunamu;
-  end;
-  setlength(datlist, datindex); // load failed, drop it off the list
+ // Read the header.
+ LoadDAT := ReadDATHeader(datlist[datindex], filu);
+ if LoadDAT <> 0 then begin
+  // Failed, drop the dat from datlist and bail out.
+  setlength(datlist, datindex);
+  if revivethread then asman_beginthread;
   exit;
  end;
- blockread(filu, ivar, 4);
- if ivar <> $CACABAAB then begin // SuperSakura signature
-  close(filu);
-  LoadDAT := 97;
-  asman_errormsg := filunamu + ' is missing SuperSakura DAT signature';
-  setlength(datlist, datindex); // load failed, drop it off the list
-  exit;
- end;
-
- // ----- Reading Resources -----
- // HEADER (sig DWORD, header length DWORD, header data)
- blockread(filu, versu, 1);
- if versu <> 3 then begin
-  close(filu);
-  LoadDAT := 97;
-  asman_errormsg := 'Incorrect DAT format version: ' + strdec(versu);
-  setlength(datlist, datindex); // load failed, drop it off the list
-  exit;
- end;
-
- // Read the project name
- blockread(filu, versu, 1);
- setlength(datlist[datindex].projectname, versu);
- blockread(filu, datlist[datindex].projectname[1], versu);
-
- // Read the game version
- blockread(filu, versu, 1);
- setlength(datlist[datindex].gameversion, versu);
- blockread(filu, datlist[datindex].gameversion[1], versu);
 
  setlength(newPNGlist, 400);
  PNGlistitems := 0;
 
- // Read the remaining data blocks
+ // Read the remaining data blocks.
  while filepos(filu) < filesize(filu) do begin
 
   blockread(filu, blockID, 4);
