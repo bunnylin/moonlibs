@@ -216,6 +216,7 @@ var asman_threadhandle : TThreadID; // used to close the thread at exit
     asman_threadID : TThreadID; // used for most thread-affecting actions
     asman_event : PRTLEvent; // used to tell the thread to start doing stuff
     asman_jobdone : PRTLEvent; // thread sets this when primeslot job done
+    asman_threadendevent : PRTLEvent; // thread sets this when exiting
     asman_gfxwriteslot : dword; // rotating index to gfxlist[]
 
     // Whenever you set any item's cachestate to 1 or 2, increment this;
@@ -274,26 +275,31 @@ begin
  asman_quitmsg := 0;
  asman_event := RTLEventCreate;
  asman_jobdone := RTLEventCreate;
+ asman_threadendevent := RTLEventCreate;
  asman_threadhandle := BeginThread(@asman_thread, NIL, asman_ThreadID, 262144);
  asman_threadalive := TRUE;
 end;
 
 procedure asman_endthread;
-var ivar : dword;
 begin
  if asman_threadalive = FALSE then exit;
- writelog('Ending asmanthread');
+ writelog('Ending asmanthread, id=' + strdec(asman_ThreadID));
  asman_quitmsg := 1; // order to shut down
  if asman_ThreadID <> 0 then begin
   asman_pokethread; // wake up! do stuff!
-  ivar := WaitForThreadTerminate(asman_ThreadID, 5000);
-  if ivar <> 0 then KillThread(asman_ThreadID);
+  // Normally this would be a good spot for WaitForThreadTerminate, but that
+  // appears to sometimes (on win32 at least) return even while the thread is
+  // still live. Waiting for an explicit event works as expected.
+  RTLEventWaitFor(asman_threadendevent, 5000);
+  KillThread(asman_ThreadID);
   CloseThread(asman_ThreadHandle); // trying to avoid handle leaking
  end;
  asman_ThreadID := 0;
  RTLEventDestroy(asman_event);
  RTLEventDestroy(asman_jobdone);
+ RTLEventDestroy(asman_threadendevent);
  asman_threadalive := FALSE;
+ writelog('Ended asmanthread');
 end;
 
 function seekgfx(const nam : UTF8string; rqsizex, rqsizey : word) : dword;
@@ -430,7 +436,7 @@ var ivar : dword;
       if ListThis = 0 then begin
        // we went all the way around again, and no state-3's either??
        // in that case, pause the cacher and enlarge gfxlist[]
-       writelog('CacheGFX: gfxlist out of space, enlarging...');
+       writelog('CacheGFX: gfxlist out of space, enlarging from ' + strdec(length(gfxlist)));
        asman_endthread;
        ListThis := length(gfxlist);
        setlength(gfxlist, ListThis + 32);
@@ -882,6 +888,7 @@ begin
   // YES, let's load the PNG file! (or generate a pic in case of errors)
   if LoadGFX_LoadPNG(slotnum) = FALSE then LoadGFX_FillGradient;
   // Easy peasy, we can call it a day.
+  writelog('loadgfx origsize easy');
   exit;
  end;
 
@@ -1005,6 +1012,7 @@ begin
   WriteBarrier;
   cachestate := 3;
   interlockeddecrement(asman_queueitems);
+  writelog('Loaded slot ' + strdec(slotnum) + ' memcount=' + strdec(asman_gfxmemcount) + ' queue=' + strdec(asman_queueitems));
  end;
  // And we're done!
 end;
@@ -2284,7 +2292,7 @@ var workslot : dword;
   procedure DoSlot(slotnum : dword);
   begin
    // Load the graphic for this slot!
-   with gfxlist[slotnum] do writelog('doslot ' + strdec(slotnum) + ' namu=' + namu + ' cachestate=' + strdec(cachestate) + ' sacred=' + strdec(byte(sacred)));
+   with gfxlist[slotnum] do writelog('doslot ' + strdec(slotnum) + ' namu=' + namu + ' cachestate=' + strdec(cachestate) + ' sacred=' + strdec(byte(sacred)) + ' prime=' + strdec(asman_primeslot));
    LoadGFX(slotnum);
    // Another queueable item is belong to us!
   end;
@@ -2336,6 +2344,7 @@ begin
    if asman_quitmsg = 0 then ThreadSwitch; // kindly give up our timeslice
   end;
  until asman_quitmsg <> 0;
+ RTLEventSetEvent(asman_threadendevent);
  EndThread(0); // return 0 for a successful exit
 end;
 
