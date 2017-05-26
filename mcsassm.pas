@@ -148,6 +148,7 @@ type // Resource types
        filenamu : UTF8string;
        bannerofs : dword;
        projectname : UTF8string;
+       parentname : UTF8string;
        projectdesc : UTF8string;
        gameversion : UTF8string;
      end;
@@ -1935,10 +1936,21 @@ begin
  // Read the banner image offset.
  blockread(filu, dest.bannerofs, 4);
 
- // Read the project name.
+ // Read the project/parent name.
  blockread(filu, ivar, 1);
- setlength(dest.projectname, ivar);
- if ivar <> 0 then blockread(filu, dest.projectname[1], ivar);
+ setlength(dest.parentname, ivar);
+ if ivar <> 0 then blockread(filu, dest.parentname[1], ivar);
+ dest.parentname := lowercase(dest.parentname);
+ // Extract the project name from the file name.
+ dest.projectname := dest.filenamu;
+ if lowercase(copy(dest.projectname, length(dest.projectname) - 3, 4)) = '.dat'
+ then setlength(dest.projectname, length(dest.projectname) - 4);
+ ivar := length(dest.projectname);
+ while (ivar <> 0) and (dest.projectname[ivar] in ['/','\'] = FALSE) do dec(ivar);
+ if ivar <> 0 then dest.projectname := copy(dest.projectname, ivar + 1, length(dest.projectname));
+ dest.projectname := lowercase(dest.projectname);
+ // If the project and parent are the same, no parent dependency.
+ if dest.parentname = dest.projectname then dest.parentname := '';
 
  // Read the project description.
  blockread(filu, ivar, 1);
