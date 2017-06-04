@@ -200,7 +200,7 @@ function CompressStringTable(poku : ppointer; langindex : dword) : dword;
 function DecompressScripts(poku : pointer; blocksize : dword) : boolean;
 function DecompressStringTable(poku : pointer; blocksize : dword) : boolean;
 function ReadDATHeader(var dest : DATtype; var filu : file) : byte;
-function LoadDAT(const filunamu : UTF8string) : byte;
+function LoadDAT(const filunamu : UTF8string; const onlybanner : UTF8string) : byte;
 procedure UnloadDATs;
 
 function asman_isthreadalive : boolean;
@@ -2060,23 +2060,24 @@ begin
  end;
 end;
 
-function LoadDAT(const filunamu : UTF8string) : byte;
+function LoadDAT(const filunamu : UTF8string; const onlybanner : UTF8string) : byte;
 // Attempts to load a .DAT resource pack. Returns 0 if successful, otherwise
 // returns an error number and an error message is placed in asman_errormsg.
+// If onlybanner is not empty, loads the banner if available, names it to the
+// onlybanner string, and loads nothing else.
 var filu : file;
     blockp : pointer;
     datindex, blockID, blocksize, ivar, jvar : dword;
     pnglistitems : dword;
     newPNGlist : array of PNGtype;
-    PNGswap : PNGtype;
-    PNGpoku : pPNGtype;
+    PNGitem : PNGtype;
     swaps : string;
     opresult, revivethread : boolean;
 begin
  LoadDAT := 0;
  opresult := TRUE;
  // just to eliminate compiler warnings
- swaps := ''; assign(filu, '');
+ assign(filu, '');
  blocksize := 0; blockID := 0;
 
  asman_errormsg := '';
@@ -2086,7 +2087,7 @@ begin
   exit;
  end;
 
- writelog('Loading dat ' + filunamu);
+ writelog('Accessing dat ' + filunamu);
 
  // We have to shut down the cacher thread for a bit... this will require
  // moving stuff around in memory and we don't want access conflicts.
@@ -2110,6 +2111,9 @@ begin
 
  setlength(newPNGlist, 400);
  PNGlistitems := 0;
+ PNGitem.namu := '';
+
+ if onlybanner <> '' then seek(filu, datlist[datindex].bannerofs);
 
  // Read the remaining data blocks.
  while filepos(filu) < filesize(filu) do begin
@@ -2148,53 +2152,23 @@ begin
     // PNG IMAGE
     $531E0BB0:
     begin
-     jvar := filepos(filu) + blocksize; // end of this block
-     // Check if PNG by this name is already listed.
-     blockread(filu, swaps[0], 1); // namu : string[31]
-     blockread(filu, swaps[1], byte(swaps[0]));
-     swaps := upcase(swaps);
-     ivar := GetPNG(swaps);
-     // PNG is already listed, overwrite it.
+     ReadImageFromDAT(filu, PNGitem, blocksize, filunamu);
+     // If only the banner is being loaded, rename the file.
+     if onlybanner <> '' then PNGitem.namu := upcase(onlybanner);
+     // Check if a PNG by this name is already listed.
+     ivar := GetPNG(PNGitem.namu);
      if ivar <> 0 then
-      PNGpoku := @PNGlist[ivar]
+      // PNG is already listed, overwrite it.
+      PNGlist[ivar] := PNGitem
      else begin
       // Unlisted PNG, add to newPNGlist.
       if PNGlistitems >= dword(length(newPNGlist)) then setlength(newPNGlist, length(newPNGlist) + 100);
-      PNGpoku := @newPNGlist[PNGlistitems];
+      newPNGlist[PNGlistitems] := PNGitem;
       inc(PNGlistitems);
      end;
-     // Read the metadata.
-     PNGpoku^.namu := swaps;
-     blockread(filu, PNGpoku^.origresx, sizeof(PNGtype.origresx));
-     blockread(filu, PNGpoku^.origresy, sizeof(PNGtype.origresy));
-     blockread(filu, PNGpoku^.origsizexp, sizeof(PNGtype.origsizexp));
-     blockread(filu, PNGpoku^.origsizeyp, sizeof(PNGtype.origsizeyp));
-     blockread(filu, PNGpoku^.origofsxp, sizeof(PNGtype.origofsxp));
-     blockread(filu, PNGpoku^.origofsyp, sizeof(PNGtype.origofsyp));
-     blockread(filu, PNGpoku^.framecount, sizeof(PNGtype.framecount));
-     if PNGpoku^.framecount = 0 then PNGpoku^.framecount := 1;
-     PNGpoku^.origframeheightp := PNGpoku^.origsizeyp div PNGpoku^.framecount;
 
-     PNGpoku^.origsizex := (PNGpoku^.origsizexp shl 15 + PNGpoku^.origresx shr 1) div PNGpoku^.origresx;
-     PNGpoku^.origsizey := (PNGpoku^.origframeheightp shl 15 + PNGpoku^.origresy shr 1) div PNGpoku^.origresy;
-     if PNGpoku^.origofsxp >= 0
-     then PNGpoku^.origofsx := (dword(PNGpoku^.origofsxp) shl 15 + PNGpoku^.origresx shr 1) div PNGpoku^.origresx
-     else PNGpoku^.origofsx := -((dword(-PNGpoku^.origofsxp) shl 15 + PNGpoku^.origresx shr 1) div PNGpoku^.origresx);
-     if PNGpoku^.origofsyp >= 0
-     then PNGpoku^.origofsy := (dword(PNGpoku^.origofsyp) shl 15 + PNGpoku^.origresy shr 1) div PNGpoku^.origresy
-     else PNGpoku^.origofsy := -((dword(-PNGpoku^.origofsyp) shl 15 + PNGpoku^.origresy shr 1) div PNGpoku^.origresy);
-
-     blockread(filu, PNGpoku^.seqlen, sizeof(PNGtype.seqlen));
-     setlength(PNGpoku^.sequence, PNGpoku^.seqlen);
-     if PNGpoku^.seqlen <> 0 then
-      blockread(filu, PNGpoku^.sequence[0], PNGpoku^.seqlen * 4);
-     blockread(filu, PNGpoku^.bitflag, sizeof(PNGtype.bitflag));
-     // Remember where to find the image data
-     PNGpoku^.srcfilename := filunamu;
-     PNGpoku^.srcfileofs := filepos(filu);
-     PNGpoku^.srcfilesizu := jvar - filepos(filu);
-     // Skip the rest
-     seek(filu, jvar);
+     // If we're only loading the banner, quit loading immediately.
+     if onlybanner <> '' then break;
     end;
 
     // OGG SOUND
@@ -2239,7 +2213,6 @@ begin
    PNGlist[ivar] := newPNGlist[PNGlistitems];
    setlength(PNGlist[ivar].sequence, PNGlist[ivar].seqlen);
    PNGlist[ivar].sequence := newPNGlist[PNGlistitems].sequence;
-   //move(newPNGlist[0], PNGlist[ivar], PNGlistitems * sizeof(PNGtype));
   end;
 
   setlength(newPNGlist, 0);
@@ -2252,9 +2225,9 @@ begin
     if jvar = $FFFFFFFF then inc(ivar) else begin ivar := jvar; jvar := $FFFFFFFF; end;
    end
    else begin
-    PNGswap := PNGlist[ivar];
+    PNGitem := PNGlist[ivar];
     PNGlist[ivar] := PNGlist[ivar - 1];
-    PNGlist[ivar - 1] := PNGswap;
+    PNGlist[ivar - 1] := PNGitem;
     jvar := ivar; dec(ivar);
    end;
   end;
@@ -2266,6 +2239,30 @@ begin
  if jvar > ivar then begin
   setlength(gfxlist, jvar);
   fillbyte(gfxlist[ivar], (jvar - ivar) * sizeof(gfxtype), 0);
+ end;
+
+ // Maintain the Dat list.
+ // If we're loading only the banner, drop the dat. Banners are transitory,
+ // so no need to retain them over savestates, which the datlist is used for.
+ if onlybanner <> '' then
+  setlength(datlist, datindex)
+ else begin
+  // If we loaded the entire dat, it's important to keep the dat in a list so
+  // that a save state can require the same dat to be loaded. If the same dat
+  // is being loaded multiple times, drop the earlier instance.
+  ivar := datindex;
+  while ivar <> 0 do begin
+   dec(ivar);
+   if datlist[ivar].filenamu = datlist[datindex].filenamu then begin
+    // Found a match. Shift everything above this down by one.
+    while ivar < datindex do begin
+     datlist[ivar] := datlist[ivar + 1];
+     inc(ivar);
+    end;
+    setlength(datlist, datindex);
+    break;
+   end;
+  end;
  end;
 
  // Now it's safe for the cacher thread to get up again
