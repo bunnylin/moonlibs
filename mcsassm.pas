@@ -1160,7 +1160,7 @@ var outfile : file;
 
    WriteLog('read the tsv! acquired rows: ' + strdec(rowcount));
    readp := NIL; endp := NIL; cellstart := NIL;
-   // Shrink the imported table to minimum required
+   // Shrink the imported table to minimum required.
    setlength(row, rowcount);
 
    // Make sure our language list contains all languages from the table.
@@ -1490,13 +1490,15 @@ begin
   for ivar := length(script) - 1 downto 0 do begin
    if langindex < dword(length(script[ivar].stringlist)) then
     with script[ivar] do begin
-     // stringcount dword, terminator word
+     // stringcount dword + terminator word
      inc(unpackedsize, 6);
      // labelnamu ministring
      inc(unpackedsize, dword(length(labelnamu)) + 1);
-     if length(stringlist[langindex].txt) <> 0 then
-      for jvar := length(stringlist[langindex].txt) - 1 downto 0 do
-       inc(unpackedsize, 2 + dword(length(stringlist[langindex].txt[jvar])));
+     with stringlist[langindex] do
+      if length(txt) <> 0 then
+       for jvar := length(txt) - 1 downto 0 do
+        // string index dword + length word + string itself
+        inc(unpackedsize, 6 + dword(length(txt[jvar])));
     end;
   end;
 
@@ -1506,7 +1508,7 @@ begin
  ivar := unpackedsize + unpackedsize shr 9 + 16;
  getmem(poku^, ivar);
 
- // Write the block header
+ // Write the block header.
  dword(poku^^) := $511E0BB0; // signature
  //dword((poku^ + 4)^) := compressed block size, skip for now...
  //dword((poku^ + 8)^) := unpackedsize; // uncompressed stream size, skip...
@@ -1520,7 +1522,7 @@ begin
  zzz.next_out := poku^ + 12; // skip sig, blocksize, streamsize
  zzz.avail_out := ivar - 12;
 
- // Save the UTF-8 language descriptor ministring
+ // Save the UTF-8 language descriptor ministring.
  ivar := length(languagelist[langindex]);
  if ivar > 255 then ivar := 255;
  zzz.next_in := @ivar;
@@ -1532,7 +1534,7 @@ begin
  zlibcode := deflate(zzz, Z_NO_FLUSH);
  if zlibcode <> Z_OK then begin zzzerror; exit; end;
 
- // Pack the strings label by label
+ // Pack the strings label by label...
  if length(script) <> 0 then
  for ivar := 0 to length(script) - 1 do begin
   if langindex < dword(length(script[ivar].stringlist)) then begin
@@ -1543,7 +1545,9 @@ begin
    if zlibcode <> Z_OK then begin zzzerror; exit; end;
 
    with script[ivar].stringlist[langindex] do begin
-    // save the string count
+    // save the string count (or more precisely, the array length required to
+    // store strings up to the highest index listed, since empty strings are
+    // not saved)
     lvar := length(txt);
     zzz.next_in := @lvar;
     zzz.avail_in := 4;
@@ -1552,21 +1556,29 @@ begin
 
     // loop through the strings in this label...
     if length(txt) <> 0 then
-    for jvar := 0 to length(txt) - 1 do begin
-     // save the string length
-     lvar := length(txt[jvar]);
-     zzz.next_in := @lvar;
-     zzz.avail_in := 2;
-     zlibcode := deflate(zzz, Z_NO_FLUSH);
-     if zlibcode <> Z_OK then begin zzzerror; exit; end;
-     // save the string
-     if lvar <> 0 then begin
-      zzz.next_in := @txt[jvar][1];
-      zzz.avail_in := lvar;
-      zlibcode := deflate(zzz, Z_NO_FLUSH);
-      if zlibcode <> Z_OK then begin zzzerror; exit; end;
-     end;
-    end;
+     for jvar := 0 to length(txt) - 1 do
+      if length(txt[jvar]) <> 0 then begin
+
+       // save the string length
+       lvar := length(txt[jvar]);
+       zzz.next_in := @lvar;
+       zzz.avail_in := 2;
+       zlibcode := deflate(zzz, Z_NO_FLUSH);
+       if zlibcode <> Z_OK then begin zzzerror; exit; end;
+       // save the string index
+       zzz.next_in := @jvar;
+       zzz.avail_in := 4;
+       zlibcode := deflate(zzz, Z_NO_FLUSH);
+       if zlibcode <> Z_OK then begin zzzerror; exit; end;
+       // save the string
+       if lvar <> 0 then begin
+        zzz.next_in := @txt[jvar][1];
+        zzz.avail_in := lvar;
+        zlibcode := deflate(zzz, Z_NO_FLUSH);
+        if zlibcode <> Z_OK then begin zzzerror; exit; end;
+       end;
+      end;
+
     // save the terminator
     lvar := $FFFFFFFF;
     zzz.next_in := @lvar;
@@ -1825,7 +1837,7 @@ begin
   labelnamu := string(streamp^);
   inc(streamp, ivar + 1);
 
-  // Figure out where these strings can be placed
+  // Figure out where these strings can be placed.
   if labelnamu = '' then
    // global label!
    targetlabel := @script[0]
@@ -1844,18 +1856,19 @@ begin
    end;
   end;
 
-  // Make sure the string list is big enough
+  // Make sure the string list is big enough.
   if length(targetlabel^.stringlist) < length(languagelist) then
    setlength(targetlabel^.stringlist, length(languagelist));
 
-  // Get the string count for this label
+  // Get the string count for this label. The label's string list must be
+  // able to fit at least this many strings, although existing strings with
+  // higher indexes must be left in place.
   ivar := dword(streamp^);
   inc(streamp, 4);
-  setlength(targetlabel^.stringlist[langindex].txt, 0);
-  setlength(targetlabel^.stringlist[langindex].txt, ivar);
+  if ivar > dword(length(targetlabel^.stringlist[langindex].txt)) then
+   setlength(targetlabel^.stringlist[langindex].txt, ivar);
 
-  // Loop through the string block
-  ivar := 0;
+  // Loop through the string block...
   repeat
    // Bounds check...
    if streamp + 2 > streamend then break;
@@ -1865,13 +1878,16 @@ begin
    // Check for the terminator
    if jvar >= $FFFF then break;
    // Bounds check...
-   if streamp + jvar > streamend then break;
+   if streamp + jvar + 4 > streamend then break;
+   // Get the string index
+   ivar := dword(streamp^);
+   inc(streamp, 4);
    // Get the string
+   targetlabel^.stringlist[langindex].txt[ivar] := '';
    setlength(targetlabel^.stringlist[langindex].txt[ivar], jvar);
    move(streamp^, targetlabel^.stringlist[langindex].txt[ivar][1], jvar);
    inc(streamp, jvar);
    inc(numstrings);
-   inc(ivar);
   until FALSE;
 
   inc(numlabels);
