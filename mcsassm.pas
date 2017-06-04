@@ -1918,6 +1918,70 @@ begin
  DecompressStringTable := TRUE;
 end;
 
+procedure ReadImageFromDAT(var filu : file; var PNGitem : PNGtype; blocksize : dword; const datfilename : UTF8string);
+// Filu must be an open file, seeked to the first data byte of a PNG block.
+// Loads the image's metadata into PNGitem. Fails silently in case of errors.
+// Blocksize must be the block size of this PNG block. Datfilename must be
+// the path and name of the data file being read.
+// The caller is responsible for closing the file.
+var metaheader : array[0..383] of byte;
+    ofs, blockend : dword;
+const typesize = sizeof(PNGtype.origresx) + sizeof(PNGtype.origresy)
+    + sizeof(PNGtype.origsizexp) + sizeof(PNGtype.origsizeyp)
+    + sizeof(PNGtype.origofsxp) + sizeof(PNGtype.origofsyp)
+    + sizeof(PNGtype.framecount) + sizeof(PNGtype.seqlen);
+begin
+ blockend := filepos(filu) + blocksize; // end of this block
+
+ // Read the image meta header into memory.
+ blockread(filu, metaheader[0], 1); // image name byte length
+ blockread(filu, metaheader[1], metaheader[0] + typesize);
+
+ // Get the image's name.
+ setlength(PNGitem.namu, metaheader[0]);
+ move(metaheader[1], PNGitem.namu[1], metaheader[0]);
+ PNGitem.namu := upcase(PNGitem.namu);
+
+ // Get the metadata.
+ ofs := metaheader[0] + 1;
+ with PNGitem do begin
+  move(metaheader[ofs], origresx, sizeof(origresx)); inc(ofs, sizeof(origresx));
+  move(metaheader[ofs], origresy, sizeof(origresy)); inc(ofs, sizeof(origresy));
+  move(metaheader[ofs], origsizexp, sizeof(origsizexp)); inc(ofs, sizeof(origsizexp));
+  move(metaheader[ofs], origsizeyp, sizeof(origsizeyp)); inc(ofs, sizeof(origsizeyp));
+  move(metaheader[ofs], origofsxp, sizeof(origofsxp)); inc(ofs, sizeof(origofsxp));
+  move(metaheader[ofs], origofsyp, sizeof(origofsyp)); inc(ofs, sizeof(origofsyp));
+  move(metaheader[ofs], framecount, sizeof(framecount)); inc(ofs, sizeof(framecount));
+  move(metaheader[ofs], seqlen, sizeof(seqlen));
+
+  // Read the animation data.
+  setlength(sequence, seqlen);
+  if seqlen <> 0 then blockread(filu, sequence[0], seqlen * 4);
+  blockread(filu, bitflag, sizeof(bitflag));
+
+  // Validate the metadata.
+  if framecount = 0 then framecount := 1;
+  origframeheightp := origsizeyp div framecount;
+
+  origsizex := (origsizexp shl 15 + origresx shr 1) div origresx;
+  origsizey := (origframeheightp shl 15 + origresy shr 1) div origresy;
+  if origofsxp >= 0
+  then origofsx := (dword(origofsxp) shl 15 + origresx shr 1) div origresx
+  else origofsx := -((dword(-origofsxp) shl 15 + origresx shr 1) div origresx);
+  if origofsyp >= 0
+  then origofsy := (dword(origofsyp) shl 15 + origresy shr 1) div origresy
+  else origofsy := -((dword(-origofsyp) shl 15 + origresy shr 1) div origresy);
+
+  // Remember where to find the image data.
+  srcfilename := datfilename;
+  srcfileofs := filepos(filu);
+  srcfilesizu := blockend - filepos(filu);
+ end;
+
+ // Skip to the next data block.
+ seek(filu, blockend);
+end;
+
 function ReadDATHeader(var dest : DATtype; var filu : file) : byte;
 // Attempts to read the header of a .DAT resource pack. The file name must be
 // preset in the given DATtype record, and the file handle should be just
