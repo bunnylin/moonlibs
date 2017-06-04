@@ -291,8 +291,11 @@ begin
   // appears to sometimes (on win32 at least) return even while the thread is
   // still live. Waiting for an explicit event works as expected.
   RTLEventWaitFor(asman_threadendevent, 5000);
-  KillThread(asman_ThreadID);
-  CloseThread(asman_ThreadHandle); // trying to avoid handle leaking
+  // If threadID wasn't set to 0, the thread didn't exit cleanly, so try to
+  // kill it.
+  if asman_threadID <> 0 then KillThread(asman_ThreadID);
+  // Close handle explicitly for fear of handle leaking.
+  CloseThread(asman_ThreadHandle);
  end;
  asman_ThreadID := 0;
  RTLEventDestroy(asman_event);
@@ -2361,6 +2364,7 @@ begin
   end;
  until asman_quitmsg <> 0;
  RTLEventSetEvent(asman_threadendevent);
+ asman_threadID := 0; // clear own thread ID to signal clean exit
  EndThread(0); // return 0 for a successful exit
 end;
 
