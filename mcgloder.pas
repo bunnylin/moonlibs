@@ -1891,317 +1891,349 @@ end;
 
 procedure mcg_ScaleBitmap24(poku : pbitmaptype; tox, toy : dword);
 // Resize procedure called by mcg_ScaleBitmap.
-var processor, source, target : pointer;
+var workbuf, srcp, destp : pointer;
     loopx, loopy : dword;
-    start, finish, span, b : dword;
-    a : array[0..5] of dword;
+    start, finish, span : dword;
+    a, b, c, d, e, f, g : dword;
 begin
  if (poku^.image = NIL) or (poku^.memformat <> 0) or (tox or toy = 0)
  then exit;
 
- // Adjust image horizontally from poku^ into processor
+ // Adjust image horizontally from poku^ into workbuf.
  if tox > poku^.sizex then begin
   start := 0;
+  a := tox * 3;
   b := poku^.sizex * 3;
-  a[3] := tox * 3;
+  g := poku^.sizey * a;
   // Horizontal stretch
-  getmem(processor, poku^.sizey * a[3]);
-  target := processor;
+  getmem(workbuf, g);
+  destp := workbuf;
   span := (poku^.sizex shl 15) div tox;
   for loopx := tox - 1 downto 0 do begin
    finish := start + span - 1;
-   source := poku^.image + (start shr 15) * 3;
-   if start shr 15 = finish shr 15 then begin
+   srcp := poku^.image + (start shr 15) * 3;
+   if start and $FFFF8000 = finish and $FFFF8000 then begin
     // start and finish are in the same source pixel column
     for loopy := poku^.sizey - 1 downto 0 do begin
-     word(target^) := word(source^);
-     byte((target + 2)^) := byte((source + 2)^);
-     inc(source, b);
-     inc(target, a[3]);
+     word(destp^) := word(srcp^);
+     byte((destp + 2)^) := byte((srcp + 2)^);
+     inc(srcp, b);
+     inc(destp, a);
     end;
-    dec(target, poku^.sizey * a[3]);
    end else begin
-    // start and finish are in separate source pixel columns
-    a[0] := (start and $7FFF) xor $7FFF; // weight of left column
-    a[1] := (finish and $7FFF); // weight of right column
-    a[2] := a[0] + a[1]; // total weight for dividing
+    // start and finish are in two adjacent source pixel columns
+    c := (start and $7FFF) xor $7FFF; // weight of left column
+    d := (finish and $7FFF); // weight of right column
+    e := c + d; // total weight for dividing
+    c := (c shl 15) div e; // 32k weight of left column
+    d := (d shl 15) div e; // 32k weight of right column
     for loopy := poku^.sizey - 1 downto 0 do begin
-     byte(target^) := (byte(source^) * a[0] + byte((source + 3)^) * a[1]) div a[2];
-     byte((target + 1)^) := (byte((source + 1)^) * a[0] + byte((source + 4)^) * a[1]) div a[2];
-     byte((target + 2)^) := (byte((source + 2)^) * a[0] + byte((source + 5)^) * a[1]) div a[2];
-     inc(source, b);
-     inc(target, a[3]);
+     byte((destp    )^) := (byte((srcp    )^) * c + byte((srcp + 3)^) * d) shr 15;
+     byte((destp + 1)^) := (byte((srcp + 1)^) * c + byte((srcp + 4)^) * d) shr 15;
+     byte((destp + 2)^) := (byte((srcp + 2)^) * c + byte((srcp + 5)^) * d) shr 15;
+     inc(srcp, b);
+     inc(destp, a);
     end;
-    dec(target, poku^.sizey * a[3]);
    end;
+   dec(destp, g);
    inc(start, span);
-   inc(target, 3);
+   inc(destp, 3);
   end;
-  freemem(poku^.image); poku^.image := processor; processor := NIL;
+  freemem(poku^.image); poku^.image := workbuf; workbuf := NIL;
  end else
+
  if tox < poku^.sizex then begin
   // Horizontal shrink
-  getmem(processor, tox * poku^.sizey * 3);
-  source := poku^.image; target := processor;
+  getmem(workbuf, tox * poku^.sizey * 3);
+  destp := workbuf;
   span := (poku^.sizex shl 15) div tox;
   for loopy := poku^.sizey - 1 downto 0 do begin
    start := 0;
+   b := (poku^.sizey - 1 - loopy) * poku^.sizex;
    for loopx := tox - 1 downto 0 do begin
     finish := start + span - 1;
-    b := (start shr 15) * 3;
+    srcp := poku^.image + (start shr 15 + b) * 3;
     // left edge
-    a[0] := (start and $7FFF) xor $7FFF; // weight of left column
-    a[1] := a[0]; // accumulated weight for this pixel
-    a[2] := byte((source + b)^) * a[0]; inc(b);
-    a[3] := byte((source + b)^) * a[0]; inc(b);
-    a[4] := byte((source + b)^) * a[0]; inc(b);
+    c := (start and $7FFF) xor $7FFF; // weight of left column
+    // (c is also accumulated weight for this pixel)
+    d := byte(srcp^) * c;
+    e := byte(srcp^) * c;
+    f := byte(srcp^) * c;
     // full middle columns
-    a[0] := start shr 15 + 1;
-    while a[0] < finish shr 15 do begin
-     inc(a[1], $8000); // accumulate weight
-     inc(a[2], byte((source + b)^) shl 15); inc(b);
-     inc(a[3], byte((source + b)^) shl 15); inc(b);
-     inc(a[4], byte((source + b)^) shl 15); inc(b);
-     inc(a[0]);
+    a := start shr 15 + 1;
+    while a < finish shr 15 do begin
+     inc(c, $8000); // accumulate weight
+     inc(d, byte(srcp^) shl 15); inc(srcp);
+     inc(e, byte(srcp^) shl 15); inc(srcp);
+     inc(f, byte(srcp^) shl 15); inc(srcp);
+     inc(a);
     end;
     // right edge
-    a[0] := (finish and $7FFF); // weight of right column
-    inc(a[1], a[0]); // accumulate weight
-    inc(a[2], byte((source + b)^) * a[0]); inc(b);
-    inc(a[3], byte((source + b)^) * a[0]); inc(b);
-    inc(a[4], byte((source + b)^) * a[0]);
-    // store result
-    a[0] := a[1] shr 1;
-    byte(target^) := (a[2] + a[0]) div a[1]; inc(target);
-    byte(target^) := (a[3] + a[0]) div a[1]; inc(target);
-    byte(target^) := (a[4] + a[0]) div a[1]; inc(target);
+    a := (finish and $7FFF); // weight of right column
+    inc(c, a); // accumulate weight
+    inc(d, byte(srcp^) * a); inc(srcp);
+    inc(e, byte(srcp^) * a); inc(srcp);
+    inc(f, byte(srcp^) * a);
+    // save result
+    byte(destp^) := d div c; inc(destp);
+    byte(destp^) := e div c; inc(destp);
+    byte(destp^) := f div c; inc(destp);
     inc(start, span);
    end;
-   inc(source, poku^.sizex * 3);
   end;
-  freemem(poku^.image); poku^.image := processor; processor := NIL;
+  freemem(poku^.image); poku^.image := workbuf; workbuf := NIL;
  end;
- // else... Horizontal change is unnecessary
+
+ // else... Horizontal change is unnecessary.
  poku^.sizex := tox;
 
- // Adjust image vertically from poku^ into processor
+ // Adjust image vertically from poku^ into workbuf.
  start := 0;
  b := poku^.sizex * 3;
  if toy > poku^.sizey then begin
   // Vertical stretch
-  getmem(processor, b * toy);
-  target := processor;
+  getmem(workbuf, b * toy);
+  destp := workbuf;
   span := (poku^.sizey shl 15) div toy;
   for loopy := toy - 1 downto 0 do begin
    finish := start + span - 1;
-   source := poku^.image + (start shr 15) * b;
-   if start shr 15 = finish shr 15 then begin
+   srcp := poku^.image + (start shr 15) * b;
+   if start and $FFFF8000 = finish and $FFFF8000 then begin
     // start and finish are on the same source pixel row
-    move(source^, target^, b);
-    inc(target, b);
+    move(srcp^, destp^, b);
+    inc(destp, b);
    end else begin
-    // start and finish are on separate source pixel rows
-    a[0] := (start and $7FFF) xor $7FFF; // weight of upper row
-    a[1] := (finish and $7FFF); // weight of lower row
-    a[2] := a[0] + a[1]; // total weight for dividing
+    // start and finish are on two adjacent source pixel rows
+    c := (start and $7FFF) xor $7FFF; // weight of upper row
+    d := (finish and $7FFF); // weight of lower row
+    e := c + d; // total weight for dividing
+    c := (c shl 15) div e; // 32k weight of left column
+    d := (d shl 15) div e; // 32k weight of right column
     for loopx := b - 1 downto 0 do begin
-     byte(target^) := (byte(source^) * a[0] + byte((source + b)^) * a[1]) div a[2];
-     inc(source); inc(target);
+     byte(destp^) := (byte(srcp^) * c + byte((srcp + b)^) * d) shr 15;
+     inc(srcp);
+     inc(destp);
     end;
    end;
    inc(start, span);
   end;
-  freemem(poku^.image); poku^.image := processor; processor := NIL;
+  freemem(poku^.image); poku^.image := workbuf; workbuf := NIL;
  end else
+
  if toy < poku^.sizey then begin
   // Vertical shrink
-  getmem(processor, b * toy);
-  target := processor;
+  getmem(workbuf, b * toy);
+  destp := workbuf;
   span := (poku^.sizey shl 15) div toy;
   for loopy := toy - 1 downto 0 do begin
    finish := start + span - 1;
-   source := poku^.image + (start shr 15) * b;
-   a[0] := (start and $7FFF) xor $7FFF; // weight of highest row
-   a[1] := (finish and $7FFF); // weight of lowest row
-   a[2] := (finish shr 15) - (start shr 15);
-   if a[2] <> 0 then dec(a[2]); // number of full rows between high and low
-   a[3] := a[0] + a[1] + a[2] shl 15; // total weight
+   srcp := poku^.image + (start shr 15) * b;
+   a := (start and $7FFF) xor $7FFF; // weight of highest row
+   c := (finish and $7FFF); // weight of lowest row
+   g := (finish shr 15) - (start shr 15);
+   if g <> 0 then dec(g); // number of full rows between high and low
+   d := a + c + g shl 15; // total weight
+   g := g * b;
    for loopx := b - 1 downto 0 do begin
-    // accumulate weighed pixels in a[4], first add highest and lowest
-    a[4] := byte(source^) * a[0] + byte((source + b * (a[2] + 1))^) * a[1];
-    a[5] := a[2]; // then add middle lines
-    while a[5] <> 0 do begin
-     inc(a[4], byte((source + b * a[5])^) shl 15);
-     dec(a[5]);
+    // accumulate weighed pixels in e, first add highest and lowest
+    e := byte(srcp^) * a + byte((srcp + g + b)^) * c;
+    // then add middle lines
+    if g <> 0 then begin
+     f := g;
+     repeat
+      inc(srcp, b);
+      inc(e, byte(srcp^) shl 15);
+      dec(f, b);
+     until f = 0;
+     dec(srcp, g);
     end;
-    byte(target^) := (a[4] + a[3] shr 1) div a[3]; // divide by total weight
-    inc(source); inc(target);
+    // divide by total weight
+    byte(destp^) := e div d;
+    inc(srcp);
+    inc(destp);
    end;
    inc(start, span);
   end;
-  freemem(poku^.image); poku^.image := processor; processor := NIL;
+  freemem(poku^.image); poku^.image := workbuf; workbuf := NIL;
  end;
- // else ... Vertical change is unnecessary
+
+ // else ... Vertical change is unnecessary.
  poku^.sizey := toy;
 end;
 
 procedure mcg_ScaleBitmap32(poku : pbitmaptype; tox, toy : dword);
 // Resize procedure called by mcg_ScaleBitmap.
-var processor, source, target : pointer;
+var workbuf, srcp, destp : pointer;
     loopx, loopy : dword;
-    start, finish, span, b : dword;
-    a : array[0..5] of dword;
+    start, finish, span : dword;
+    a, b, c, d, e, f, g : dword;
 begin
  if (poku^.image = NIL) or (poku^.memformat <> 1) or (tox or toy = 0)
  then exit;
 
- // Adjust image horizontally from poku^ into processor
+ // Adjust image horizontally from poku^ into workbuf.
  if tox > poku^.sizex then begin
   start := 0;
+  a := tox * 4;
   b := poku^.sizex * 4;
-  a[3] := tox * 4;
+  g := poku^.sizey * a;
   // Horizontal stretch
-  getmem(processor, poku^.sizey * a[3]);
-  target := processor;
+  getmem(workbuf, g);
+  destp := workbuf;
   span := (poku^.sizex shl 15) div tox;
   for loopx := tox - 1 downto 0 do begin
    finish := start + span - 1;
-   source := poku^.image + (start shr 15) * 4;
-   if start shr 15 = finish shr 15 then begin
+   srcp := poku^.image + (start shr 15) * 4;
+   if start and $FFFF8000 = finish and $FFFF8000 then begin
     // start and finish are in the same source pixel column
     for loopy := poku^.sizey - 1 downto 0 do begin
-     dword(target^) := dword(source^);
-     inc(source, b);
-     inc(target, a[3]);
+     dword(destp^) := dword(srcp^);
+     inc(srcp, b);
+     inc(destp, a);
     end;
-    dec(target, poku^.sizey * a[3]);
    end else begin
-    // start and finish are in separate source pixel columns
-    a[0] := (start and $7FFF) xor $7FFF; // weight of left column
-    a[1] := (finish and $7FFF); // weight of right column
-    a[2] := a[0] + a[1]; // total weight for dividing
+    // start and finish are in two adjacent source pixel columns
+    c := (start and $7FFF) xor $7FFF; // weight of left column
+    d := (finish and $7FFF); // weight of right column
+    e := c + d; // total weight for dividing
+    c := (c shl 15) div e; // 32k weight of left column
+    d := (d shl 15) div e; // 32k weight of right column
     for loopy := poku^.sizey - 1 downto 0 do begin
-     byte(target^) := (byte(source^) * a[0] + byte((source + 4)^) * a[1]) div a[2];
-     byte((target + 1)^) := (byte((source + 1)^) * a[0] + byte((source + 5)^) * a[1]) div a[2];
-     byte((target + 2)^) := (byte((source + 2)^) * a[0] + byte((source + 6)^) * a[1]) div a[2];
-     byte((target + 3)^) := (byte((source + 3)^) * a[0] + byte((source + 7)^) * a[1]) div a[2];
-     inc(source, b);
-     inc(target, a[3]);
+     byte((destp    )^) := (byte((srcp    )^) * c + byte((srcp + 4)^) * d) shr 15;
+     byte((destp + 1)^) := (byte((srcp + 1)^) * c + byte((srcp + 5)^) * d) shr 15;
+     byte((destp + 2)^) := (byte((srcp + 2)^) * c + byte((srcp + 6)^) * d) shr 15;
+     byte((destp + 3)^) := (byte((srcp + 3)^) * c + byte((srcp + 7)^) * d) shr 15;
+     inc(srcp, b);
+     inc(destp, a);
     end;
-    dec(target, poku^.sizey * a[3]);
    end;
+   dec(destp, g);
    inc(start, span);
-   inc(target, 4);
+   inc(destp, 4);
   end;
-  freemem(poku^.image); poku^.image := processor; processor := NIL;
+  freemem(poku^.image); poku^.image := workbuf; workbuf := NIL;
  end else
+
  if tox < poku^.sizex then begin
   // Horizontal shrink
-  getmem(processor, tox * poku^.sizey * 4);
-  source := poku^.image; target := processor;
+  getmem(workbuf, tox * poku^.sizey * 4);
+  destp := workbuf;
   span := (poku^.sizex shl 15) div tox;
   for loopy := poku^.sizey - 1 downto 0 do begin
    start := 0;
+   b := (poku^.sizey - 1 - loopy) * poku^.sizex;
    for loopx := tox - 1 downto 0 do begin
     finish := start + span - 1;
-    b := (start shr 15) * 4;
+    srcp := poku^.image + (start shr 15 + b) * 4;
     // left edge
-    a[0] := (start and $7FFF) xor $7FFF; // weight of left column
-    a[1] := a[0]; // accumulated weight for this pixel
-    a[2] := byte((source + b)^) * a[0]; inc(b);
-    a[3] := byte((source + b)^) * a[0]; inc(b);
-    a[4] := byte((source + b)^) * a[0]; inc(b);
-    a[5] := byte((source + b)^) * a[0]; inc(b);
+    c := (start and $7FFF) xor $7FFF; // weight of left column
+    // (c is also accumulated weight for this pixel)
+    d := byte(srcp^) * c; inc(srcp);
+    e := byte(srcp^) * c; inc(srcp);
+    f := byte(srcp^) * c; inc(srcp);
+    g := byte(srcp^) * c; inc(srcp);
     // full middle columns
-    a[0] := start shr 15 + 1;
-    while a[0] < finish shr 15 do begin
-     inc(a[1], $8000); // accumulate weight
-     inc(a[2], byte((source + b)^) shl 15); inc(b);
-     inc(a[3], byte((source + b)^) shl 15); inc(b);
-     inc(a[4], byte((source + b)^) shl 15); inc(b);
-     inc(a[5], byte((source + b)^) shl 15); inc(b);
-     inc(a[0]);
+    a := start shr 15 + 1;
+    while a < finish shr 15 do begin
+     inc(c, $8000); // accumulate weight
+     inc(d, byte(srcp^) shl 15); inc(srcp);
+     inc(e, byte(srcp^) shl 15); inc(srcp);
+     inc(f, byte(srcp^) shl 15); inc(srcp);
+     inc(g, byte(srcp^) shl 15); inc(srcp);
+     inc(a);
     end;
     // right edge
-    a[0] := (finish and $7FFF); // weight of right column
-    inc(a[1], a[0]); // accumulate weight
-    inc(a[2], byte((source + b)^) * a[0]); inc(b);
-    inc(a[3], byte((source + b)^) * a[0]); inc(b);
-    inc(a[4], byte((source + b)^) * a[0]); inc(b);
-    inc(a[5], byte((source + b)^) * a[0]);
-    // store result
-    a[0] := a[1] shr 1;
-    byte(target^) := (a[2] + a[0]) div a[1]; inc(target);
-    byte(target^) := (a[3] + a[0]) div a[1]; inc(target);
-    byte(target^) := (a[4] + a[0]) div a[1]; inc(target);
-    byte(target^) := (a[5] + a[0]) div a[1]; inc(target);
+    a := (finish and $7FFF); // weight of right column
+    inc(c, a); // accumulate weight
+    inc(d, byte(srcp^) * a); inc(srcp);
+    inc(e, byte(srcp^) * a); inc(srcp);
+    inc(f, byte(srcp^) * a); inc(srcp);
+    inc(g, byte(srcp^) * a);
+    // save result
+    byte(destp^) := d div c; inc(destp);
+    byte(destp^) := e div c; inc(destp);
+    byte(destp^) := f div c; inc(destp);
+    byte(destp^) := g div c; inc(destp);
     inc(start, span);
    end;
-   inc(source, poku^.sizex * 4);
   end;
-  freemem(poku^.image); poku^.image := processor; processor := NIL;
+  freemem(poku^.image); poku^.image := workbuf; workbuf := NIL;
  end;
- // else... Horizontal change is unnecessary
+
+ // else... Horizontal change is unnecessary.
  poku^.sizex := tox;
 
- // Adjust image vertically from poku^ into processor
+ // Adjust image vertically from poku^ into workbuf.
  start := 0;
  b := poku^.sizex * 4;
  if toy > poku^.sizey then begin
   // Vertical stretch
-  getmem(processor, b * toy);
-  target := processor;
+  getmem(workbuf, b * toy);
+  destp := workbuf;
   span := (poku^.sizey shl 15) div toy;
   for loopy := toy - 1 downto 0 do begin
    finish := start + span - 1;
-   source := poku^.image + (start shr 15) * b;
-   if start shr 15 = finish shr 15 then begin
+   srcp := poku^.image + (start shr 15) * b;
+   if start and $FFFF8000 = finish and $FFFF8000 then begin
     // start and finish are on the same source pixel row
-    move(source^, target^, b);
-    inc(target, b);
+    move(srcp^, destp^, b);
+    inc(destp, b);
    end else begin
-    // start and finish are on separate source pixel rows
-    a[0] := (start and $7FFF) xor $7FFF; // weight of upper row
-    a[1] := (finish and $7FFF); // weight of lower row
-    a[2] := a[0] + a[1]; // total weight for dividing
+    // start and finish are on two adjacent source pixel rows
+    c := (start and $7FFF) xor $7FFF; // weight of upper row
+    d := (finish and $7FFF); // weight of lower row
+    e := c + d; // total weight for dividing
+    c := (c shl 15) div e; // 32k weight of left column
+    d := (d shl 15) div e; // 32k weight of right column
     for loopx := b - 1 downto 0 do begin
-     byte(target^) := (byte(source^) * a[0] + byte((source + b)^) * a[1]) div a[2];
-     inc(source); inc(target);
+     byte(destp^) := (byte(srcp^) * c + byte((srcp + b)^) * d) shr 15;
+     inc(srcp);
+     inc(destp);
     end;
    end;
    inc(start, span);
   end;
-  freemem(poku^.image); poku^.image := processor; processor := NIL;
+  freemem(poku^.image); poku^.image := workbuf; workbuf := NIL;
  end else
+
  if toy < poku^.sizey then begin
   // Vertical shrink
-  getmem(processor, b * toy);
-  target := processor;
+  getmem(workbuf, b * toy);
+  destp := workbuf;
   span := (poku^.sizey shl 15) div toy;
   for loopy := toy - 1 downto 0 do begin
    finish := start + span - 1;
-   source := poku^.image + (start shr 15) * b;
-   a[0] := (start and $7FFF) xor $7FFF; // weight of highest row
-   a[1] := (finish and $7FFF); // weight of lowest row
-   a[2] := (finish shr 15) - (start shr 15);
-   if a[2] <> 0 then dec(a[2]); // number of full rows between high and low
-   a[3] := a[0] + a[1] + a[2] shl 15; // total weight
+   srcp := poku^.image + (start shr 15) * b;
+   a := (start and $7FFF) xor $7FFF; // weight of highest row
+   c := (finish and $7FFF); // weight of lowest row
+   g := (finish shr 15) - (start shr 15);
+   if g <> 0 then dec(g); // number of full rows between high and low
+   d := a + c + g shl 15; // total weight
+   g := g * b;
    for loopx := b - 1 downto 0 do begin
-    // accumulate weighed pixels in a[4], first add highest and lowest
-    a[4] := byte(source^) * a[0] + byte((source + b * (a[2] + 1))^) * a[1];
-    a[5] := a[2]; // then add middle lines
-    while a[5] <> 0 do begin
-     inc(a[4], byte((source + b * a[5])^) shl 15);
-     dec(a[5]);
+    // accumulate weighed pixels in e, first add highest and lowest
+    e := byte(srcp^) * a + byte((srcp + g + b)^) * c;
+    // then add middle lines
+    if g <> 0 then begin
+     f := g;
+     repeat
+      inc(srcp, b);
+      inc(e, byte(srcp^) shl 15);
+      dec(f, b);
+     until f = 0;
+     dec(srcp, g);
     end;
-    byte(target^) := (a[4] + a[3] shr 1) div a[3]; // divide by total weight
-    inc(source); inc(target);
+    // divide by total weight, save result
+    byte(destp^) := e div d;
+    inc(srcp);
+    inc(destp);
    end;
    inc(start, span);
   end;
-  freemem(poku^.image); poku^.image := processor; processor := NIL;
+  freemem(poku^.image); poku^.image := workbuf; workbuf := NIL;
  end;
- // else ... Vertical change is unnecessary
+
+ // else ... Vertical change is unnecessary.
  poku^.sizey := toy;
 end;
 
@@ -2210,6 +2242,7 @@ procedure mcg_ScaleBitmap(poku : pbitmaptype; tox, toy : word);
 // Uses a sort of general purpose linear method to do it.
 // Scaling downwards looks good, as color values stack properly.
 // Scaling upwards by integer multiples looks like a point scaler.
+// Scaling upwards by fractions is like a softened point scaler.
 begin
  if poku^.image = NIL then begin
   mcg_errortxt := 'Image pointer is NIL'; exit;
@@ -2218,11 +2251,11 @@ begin
   mcg_errortxt := 'Target size cannot be 0'; exit;
  end;
  case poku^.memformat of
-  0: mcg_ScaleBitmap24(poku, tox, toy);
-  1: mcg_ScaleBitmap32(poku, tox, toy);
-  else begin
-        mcg_errortxt := 'Image memformat must be 0 or 1'; exit;
-       end;
+   0: mcg_ScaleBitmap24(poku, tox, toy);
+   1: mcg_ScaleBitmap32(poku, tox, toy);
+   else begin
+    mcg_errortxt := 'Image memformat must be 0 or 1'; exit;
+   end;
  end;
 end;
 
