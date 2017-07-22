@@ -1381,7 +1381,7 @@ var zzz : tzstream;
 
 begin
  CompressScripts := 0;
- // Calculate how much uncompressed data we have
+ // Calculate how much uncompressed data we have.
  unpackedsize := 12; // signature, block size, uncompressed block size
  ivar := length(script);
  while ivar <> 0 do begin
@@ -1393,10 +1393,10 @@ begin
     script[ivar].codesize);
  end;
 
- // Reserve a bunch of memory for the compressed stream
+ // Reserve a bunch of memory for the compressed stream.
  getmem(poku^, unpackedsize + 65536);
 
- // Write the block header
+ // Write the block header.
  dword(poku^^) := $501E0BB0; // signature
  // dword((poku^ + 4)^) := compressed block size, skip for now...
  // dword((poku^ + 8)^) := unpackedsize; // uncompressed block size, skip...
@@ -1410,35 +1410,38 @@ begin
  zzz.next_out := poku^ + 12;
  zzz.avail_out := unpackedsize + 65536 - 12;
 
- // Pack the scripts piece by piece
+ // Pack the scripts piece by piece.
  // (skip script[0] which is hardcoded as invalid and empty)
  if length(script) >= 2 then
- for ivar := 1 to length(script) - 1 do begin
-  // save the label name...
-  zzz.next_in := @script[ivar].labelnamu[0];
-  zzz.avail_in := length(script[ivar].labelnamu) + 1;
-  zlibcode := deflate(zzz, Z_NO_FLUSH);
-  if zlibcode <> Z_OK then begin zzzerror; exit; end;
-  // save the next label name...
-  zzz.next_in := @script[ivar].nextlabel[0];
-  zzz.avail_in := length(script[ivar].nextlabel) + 1;
-  zlibcode := deflate(zzz, Z_NO_FLUSH);
-  if zlibcode <> Z_OK then begin zzzerror; exit; end;
-  // save the code size...
-  zzz.next_in := @script[ivar].codesize;
-  zzz.avail_in := 4;
-  zlibcode := deflate(zzz, Z_NO_FLUSH);
-  if zlibcode <> Z_OK then begin zzzerror; exit; end;
-  // save the bytecode...
-  if script[ivar].codesize <> 0 then begin
-   zzz.next_in := script[ivar].code;
-   zzz.avail_in := script[ivar].codesize;
-   zlibcode := deflate(zzz, Z_NO_FLUSH);
-   if zlibcode <> Z_OK then begin zzzerror; exit; end;
-  end;
- end;
+  for ivar := 1 to length(script) - 1 do
+   // Skip any script that has no code and no nextlabel.
+   if (script[ivar].nextlabel <> '') or (script[ivar].codesize <> 0)
+   then begin
+    // save the label name...
+    zzz.next_in := @script[ivar].labelnamu[0];
+    zzz.avail_in := length(script[ivar].labelnamu) + 1;
+    zlibcode := deflate(zzz, Z_NO_FLUSH);
+    if zlibcode <> Z_OK then begin zzzerror; exit; end;
+    // save the next label name...
+    zzz.next_in := @script[ivar].nextlabel[0];
+    zzz.avail_in := length(script[ivar].nextlabel) + 1;
+    zlibcode := deflate(zzz, Z_NO_FLUSH);
+    if zlibcode <> Z_OK then begin zzzerror; exit; end;
+    // save the code size...
+    zzz.next_in := @script[ivar].codesize;
+    zzz.avail_in := 4;
+    zlibcode := deflate(zzz, Z_NO_FLUSH);
+    if zlibcode <> Z_OK then begin zzzerror; exit; end;
+    // save the bytecode...
+    if script[ivar].codesize <> 0 then begin
+     zzz.next_in := script[ivar].code;
+     zzz.avail_in := script[ivar].codesize;
+     zlibcode := deflate(zzz, Z_NO_FLUSH);
+     if zlibcode <> Z_OK then begin zzzerror; exit; end;
+    end;
+   end;
 
- // Flush the output
+ // Flush the output.
  ivar := 0;
  zzz.next_in := @ivar;
  zzz.avail_in := 1;
@@ -1449,7 +1452,7 @@ begin
  zlibcode := DeflateEnd(zzz);
  if zlibcode <> Z_OK then begin zzzerror; exit; end;
 
- // Save and return the size of the compressed block
+ // Save and return the size of the compressed block.
  ivar := zzz.next_out - poku^;
  dword((poku^ + 4)^) := ivar - 8; // save, less sig and size dword itself
  dword((poku^ + 8)^) := zzz.total_in; // save true unpacked size
@@ -2019,7 +2022,7 @@ begin
  blockread(filu, ivar, 1);
  if ivar <> 3 then begin
   close(filu);
-  ReadDATHeader := 97;
+  ReadDATHeader := 96;
   asman_errormsg := 'Incorrect DAT format version: ' + strdec(ivar);
   exit;
  end;
@@ -2027,7 +2030,7 @@ begin
  // Read the banner image offset.
  blockread(filu, dest.bannerofs, 4);
 
- // Read the project/parent name.
+ // Read the parent project name.
  blockread(filu, ivar, 1);
  setlength(dest.parentname, ivar);
  if ivar <> 0 then blockread(filu, dest.parentname[1], ivar);
