@@ -2066,8 +2066,9 @@ end;
 function LoadDAT(const filunamu : UTF8string; const onlybanner : UTF8string) : byte;
 // Attempts to load a .DAT resource pack. Returns 0 if successful, otherwise
 // returns an error number and an error message is placed in asman_errormsg.
-// If onlybanner is not empty, loads the banner if available, names it to the
-// onlybanner string, and loads nothing else.
+// If onlybanner is not empty, loads only the banner if available, names it
+// to the onlybanner string, and returns 0. If no banner exists in this dat,
+// returns an error number and asman_errormsg is filled.
 var filu : file;
     blockp : pointer;
     datindex, blockID, blocksize, ivar, jvar : dword;
@@ -2116,7 +2117,18 @@ begin
  PNGlistitems := 0;
  PNGitem.namu := '';
 
- if onlybanner <> '' then seek(filu, datlist[datindex].bannerofs);
+ // If loading only the banner, seek the banner offset directly.
+ if onlybanner <> '' then begin
+  if datlist[datindex].bannerofs = 0 then begin
+   // No banner in this dat! Drop the dat from datlist and bail out.
+   LoadDat := 95;
+   asman_errormsg := 'No banner found';
+   setlength(datlist, datindex);
+   if revivethread then asman_beginthread;
+   exit;
+  end;
+  seek(filu, datlist[datindex].bannerofs);
+ end;
 
  // Read the remaining data blocks.
  while filepos(filu) < filesize(filu) do begin
