@@ -74,9 +74,7 @@ var stringstash : array of UTF8string;
 // ------------------------------------------------------------------
 implementation
 
-var bucketcount, numvarcount, strvarcount, numlanguages, danglies : dword;
-
-    bucket : array of record
+var bucket : array of record
       bucketsize : dword;
       toplink : dword;
       content : array of record
@@ -92,6 +90,9 @@ var bucketcount, numvarcount, strvarcount, numlanguages, danglies : dword;
     strvar : array of record
       txt : array of UTF8string;
     end;
+
+    bucketcount, numvarcount, strvarcount, numlanguages, danglies : dword;
+    addbucketsautomatically : boolean;
 
 {$define !debugdump}
 {$ifdef debugdump}
@@ -234,6 +235,20 @@ begin
 
  // this variable doesn't exist...
  AddVar := AddVar and $7FFFFFFF; // clear top bit
+
+ // If the content array is getting quite big, and automatic bucket
+ // management is enabled, add more buckets. This causes a slight delay as
+ // all existing variables are redistributed.
+ if (addbucketsautomatically) and (length(bucket[AddVar].content) >= 80)
+ then begin
+  poku := NIL;
+  SaveVarState(poku);
+  inc(dword((poku + 4)^), 4); // poke a bigger bucket count directly in
+  LoadVarState(poku);
+  freemem(poku); poku := NIL;
+  // Find the new bucket this variable will go in.
+  AddVar := FindVar(varnamu) and $7FFFFFFF;
+ end;
 
  with bucket[AddVar] do begin
   // Make sure the bucket's content array is big enough for a new slot.
@@ -518,6 +533,8 @@ begin
  dword((poku + 4)^) := newbuckets; // poke bucketcount in saved structure
  LoadVarState(poku);
  freemem(poku); poku := NIL;
+ // Manually setting the number of buckets disables automatic bucket adding.
+ addbucketsautomatically := FALSE;
 end;
 
 function CountNumVars : dword;
@@ -563,6 +580,7 @@ initialization
  numvarcount := 0; strvarcount := 0; danglies := 0;
  setlength(numvar, 0);
  setlength(strvar, 0);
+ addbucketsautomatically := TRUE;
 
 // ------------------------------------------------------------------
 finalization
