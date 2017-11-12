@@ -73,7 +73,11 @@ function CountBuckets : dword;
 procedure VarmonInit(numlang, numbuckets : dword);
 
 const VARMON_MAXBUCKETS = 999999;
-const VARMON_MAXLANGUAGES = 999;
+      VARMON_MAXLANGUAGES = 999;
+      VARMON_VARTYPENULL = 0;
+      VARMON_VARTYPEINT = 1;
+      VARMON_VARTYPESTR = 2;
+
 var stringstash : array of UTF8string;
 
 // ------------------------------------------------------------------
@@ -86,7 +90,7 @@ var bucket : array of record
         namu : string;
         varnum : dword;
         prevlink, nextlink : dword; // prev = topward, next = bottomward
-        vartype : byte; // 1 = num, 2 = str
+        vartype : byte; // VARMON_VARTYPE*
         special : byte; // 0 = normal, 1 = readonly system var
       end;
     end;
@@ -111,8 +115,8 @@ begin
    write('$',namu,chr(9),'bucket=',bvar,':',cont);
    if cont = bucket[bvar].toplink then write('*');
    write(chr(9),'prev=',prevlink,chr(9),'next=',nextlink,chr(9),'type=',vartype,chr(9),'spec=',special,chr(9));
-   if vartype = 1 then write(numvar[varnum]) else
-   if vartype = 2 then write(strvar[varnum].txt[0]);
+   if vartype = VARMON_VARTYPEINT then write(numvar[varnum]) else
+   if vartype = VARMON_VARTYPESTR then write(strvar[varnum].txt[0]);
    writeln;
   end;
  end;
@@ -208,6 +212,8 @@ var poku : pointer;
   end;
 
 begin
+ if NOT typenum in [VARMON_VARTYPEINT, VARMON_VARTYPESTR] then
+  raise Exception.create('AddVar: bad type ' + strdec(typenum) + ' for ' + varnamu);
  AddVar := FindVar(varnamu);
  if AddVar < $80000000 then begin
   // this variable already exists...
@@ -222,7 +228,7 @@ begin
    // if the variable type is changed, must set up a new variable slot
    // (the old slot is left dangling...)
    if vartype <> typenum then begin
-    if typenum = 1 then varnum := NewNumVar else varnum := NewStrVar;
+    if typenum = VARMON_VARTYPEINT then varnum := NewNumVar else varnum := NewStrVar;
     vartype := typenum;
     inc(danglies);
     if danglies > 1000 then begin
@@ -262,7 +268,7 @@ begin
   // Set up the new slot.
   with content[bucketsize] do begin
    namu := varnamu;
-   if typenum = 1 then varnum := NewNumVar else varnum := NewStrVar;
+   if typenum = VARMON_VARTYPEINT then varnum := NewNumVar else varnum := NewStrVar;
    vartype := typenum;
    special := 0;
    if sudo then special := 1;
@@ -323,7 +329,7 @@ begin
   kvar := AddVar(string((poku + ofsu)^), lvar, mvar <> 0);
   inc(ofsu, byte((poku + ofsu)^) + byte(1));
   jvar := bucket[kvar].content[bucket[kvar].toplink].varnum;
-  if lvar = 0 then begin
+  if lvar = VARMON_VARTYPEINT then begin
    // numeric variable!
    numvar[jvar] := longint((poku + ofsu)^);
    inc(ofsu, 4);
@@ -396,10 +402,12 @@ begin
   while jvar <> 0 do begin
    dec(jvar);
    kvar := bucket[ivar].content[jvar].varnum;
-   if bucket[ivar].content[jvar].vartype = 1 then begin // numeric variable!
+   if bucket[ivar].content[jvar].vartype = VARMON_VARTYPEINT then begin
+    // numeric variable!
     inc(memused, 7 + dword(length(bucket[ivar].content[jvar].namu)));
     inc(numnumerics);
-   end else begin // string variable!
+   end else begin
+    // string variable!
     mvar := 0;
     for lvar := numlanguages - 1 downto 0 do
      inc(mvar, dword(length(strvar[kvar].txt[lvar])));
@@ -437,9 +445,10 @@ begin
    inc(memused, dword(length(bucket[ivar].content[jvar].namu)) + 1);
 
    kvar := bucket[ivar].content[jvar].varnum;
-   if bucket[ivar].content[jvar].vartype = 1 then begin
+   if bucket[ivar].content[jvar].vartype = VARMON_VARTYPEINT then begin
     // numeric variable!
     longint((poku + memused)^) := numvar[kvar];
+    inc(memused, 4);
    end else begin
     // string variable!
     for lvar := 0 to numlanguages - 1 do begin
@@ -455,10 +464,10 @@ begin
 end;
 
 function GetVarType(const varnamu : string) : byte;
-// Returns the variable type: 0 = doesn't exist, 1 = number, 2 = string
+// Returns the variable type, VARMON_VARTYPE*.
 var ivar : dword;
 begin
- GetVarType := 0;
+ GetVarType := VARMON_VARTYPENULL;
  ivar := FindVar(upcase(varnamu));
  if ivar >= $80000000 then exit; // variable doesn't exist
  GetVarType := bucket[ivar].content[bucket[ivar].toplink].vartype;
@@ -489,7 +498,7 @@ begin
  ivar := FindVar(upcase(varnamu));
  if ivar >= $80000000 then exit; // variable doesn't exist
  jvar := bucket[ivar].toplink;
- if bucket[ivar].content[jvar].vartype <> 1 then exit; // string variable
+ if bucket[ivar].content[jvar].vartype <> VARMON_VARTYPEINT then exit;
  GetNumVar := numvar[bucket[ivar].content[jvar].varnum];
 end;
 
@@ -523,7 +532,7 @@ begin
   exit;
  end;
  jvar := bucket[ivar].toplink;
- if bucket[ivar].content[jvar].vartype = 1 then begin
+ if bucket[ivar].content[jvar].vartype = VARMON_VARTYPEINT then begin
   // numeric variable, convert to string
   ivar := bucket[ivar].content[jvar].varnum;
   stringstash[0] := strdec(numvar[ivar]);
