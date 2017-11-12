@@ -106,14 +106,14 @@ var bucket : array of record
 {$define !debugdump}
 {$ifdef debugdump}
 procedure DumpVarTable;
-var bvar, cont : dword;
+var b, cont : dword;
 begin
- for bvar := 0 to bucketcount - 1 do begin
-  if bucket[bvar].bucketsize <> 0 then
-  for cont := 0 to bucket[bvar].bucketsize - 1 do
-  with bucket[bvar].content[cont] do begin
-   write('$',namu,chr(9),'bucket=',bvar,':',cont);
-   if cont = bucket[bvar].toplink then write('*');
+ for b := 0 to bucketcount - 1 do begin
+  if bucket[b].bucketsize <> 0 then
+  for cont := 0 to bucket[b].bucketsize - 1 do
+  with bucket[b].content[cont] do begin
+   write('$',namu,chr(9),'bucket=',b,':',cont);
+   if cont = bucket[b].toplink then write('*');
    write(chr(9),'prev=',prevlink,chr(9),'next=',nextlink,chr(9),'type=',vartype,chr(9),'spec=',special,chr(9));
    if vartype = VARMON_VARTYPEINT then write(numvar[varnum]) else
    if vartype = VARMON_VARTYPESTR then write(strvar[varnum].txt[0]);
@@ -125,21 +125,21 @@ end;
 
 function HashString(const varnamu : string) : dword;
 // Returns the bucket number that this variable name belongs to.
-var ivar : dword;
+var i : dword;
     strlen : byte;
 begin
  HashString := 0;
  strlen := length(varnamu);
- ivar := 1;
- while ivar + 3 <= strlen do begin
+ i := 1;
+ while i + 3 <= strlen do begin
   HashString := RORdword(HashString, 13);
-  HashString := HashString xor dword((@varnamu[ivar])^);
-  inc(ivar, 4);
+  HashString := HashString xor dword((@varnamu[i])^);
+  inc(i, 4);
  end;
- while ivar <= strlen do begin
+ while i <= strlen do begin
   HashString := RORdword(HashString, 3);
-  HashString := HashString xor byte(varnamu[ivar]);
-  inc(ivar);
+  HashString := HashString xor byte(varnamu[i]);
+  inc(i);
  end;
  HashString := HashString mod bucketcount;
 end;
@@ -149,41 +149,41 @@ function FindVar(const varnamu : string) : dword;
 // does, the variable is moved to the top of its bucket, and FindVar returns
 // the bucket's number. If the variable doesn't exist, returns the bucket's
 // number OR $8000 0000 so the caller can add it to the bucket if desired.
-var ivar, jvar : dword;
+var i, j : dword;
 begin
  FindVar := HashString(varnamu);
- ivar := bucket[FindVar].bucketsize;
+ i := bucket[FindVar].bucketsize;
 
- if ivar = 0 then begin
-  // empty bucket! this variable name doesn't exist yet
+ if i = 0 then begin
+  // Empty bucket! this variable name doesn't exist yet.
   FindVar := FindVar or $80000000;
   exit;
  end;
 
- jvar := bucket[FindVar].toplink;
- while ivar <> 0 do with bucket[FindVar] do begin
-  if content[jvar].namu = varnamu then begin
-   // found a match!
-   // move the matched variable name to the top, if not already at the top
-   if toplink <> jvar then begin
-    if ivar <> 1 then begin
-     // detach from current link position, if not at very bottom
-     content[content[jvar].prevlink].nextlink := content[jvar].nextlink;
-     content[content[jvar].nextlink].prevlink := content[jvar].prevlink;
+ j := bucket[FindVar].toplink;
+ while i <> 0 do with bucket[FindVar] do begin
+  if content[j].namu = varnamu then begin
+   // Found a match!
+   // Move the matched variable name to the top, if not already at the top.
+   if toplink <> j then begin
+    if i <> 1 then begin
+     // Detach from current link position, if not at very bottom.
+     content[content[j].prevlink].nextlink := content[j].nextlink;
+     content[content[j].nextlink].prevlink := content[j].prevlink;
     end;
-    // prepare own link
-    content[jvar].nextlink := toplink;
-    // attach at top link position
-    content[toplink].prevlink := jvar;
-    toplink := jvar;
+    // Prepare own link.
+    content[j].nextlink := toplink;
+    // Attach at top link position.
+    content[toplink].prevlink := j;
+    toplink := j;
    end;
    exit; // return the bucket number
   end;
-  jvar := content[jvar].nextlink;
-  dec(ivar);
+  j := content[j].nextlink;
+  dec(i);
  end;
 
- // no match found in bucket, this variable name doesn't exist yet
+ // No match found in bucket, this variable name doesn't exist yet.
  FindVar := FindVar or $80000000;
 end;
 
@@ -216,25 +216,25 @@ begin
   raise Exception.create('AddVar: bad type ' + strdec(typenum) + ' for ' + varnamu);
  AddVar := FindVar(varnamu);
  if AddVar < $80000000 then begin
-  // this variable already exists...
+  // This variable already exists...
   with bucket[AddVar].content[bucket[AddVar].toplink] do begin
-   // check if it's write-protected and can't be changed
+   // Check if it's write-protected and can't be changed.
    if sudo = FALSE then begin
     if special and 1 <> 0 then
      raise Exception.create('Variable ' + varnamu + ' is write-protected');
     special := 0;
    end
    else special := 1;
-   // if the variable type is changed, must set up a new variable slot
+   // If the variable type is changed, must set up a new variable slot.
    // (the old slot is left dangling...)
    if vartype <> typenum then begin
     if typenum = VARMON_VARTYPEINT then varnum := NewNumVar else varnum := NewStrVar;
     vartype := typenum;
     inc(danglies);
     if danglies > 1000 then begin
-     // too many dangling, reshuffle all variables, may take a moment...
-     // this only happens if a script keeps switching same named variables
-     // between number and string types, which you shouldn't be doing anyway
+     // Too many dangling. Reshuffle all variables, may take a moment...
+     // This only happens if a script keeps switching same named variables
+     // between number and string types, which you shouldn't be doing anyway.
      poku := NIL;
      SaveVarState(poku);
      LoadVarState(poku); // loadstate sets danglies to 0
@@ -245,8 +245,8 @@ begin
   exit;
  end;
 
- // this variable doesn't exist...
- AddVar := AddVar and $7FFFFFFF; // clear top bit
+ // This variable doesn't exist... clear the inexistence bit.
+ AddVar := AddVar and $7FFFFFFF;
 
  // If the content array is getting quite big, and automatic bucket
  // management is enabled, add more buckets. This causes a slight delay as
@@ -291,7 +291,7 @@ procedure LoadVarState(poku : pointer);
 // languages is greater, then language 0 is copied to the extra languages.
 // The caller is responsible for freeing the buffer.
 // The savestate buffer is not robustly checked for correctness, beware.
-var ivar, jvar, kvar, lvar, mvar, ofsu : dword;
+var i, j, k, l, m, ofsu : dword;
     memused, savedbuckets, numnumerics, numstrings, savedlanguages : dword;
 begin
  // Safeties, read the header.
@@ -319,40 +319,40 @@ begin
  VarmonInit(numlanguages, savedbuckets);
  setlength(numvar, numnumerics + 8);
  setlength(strvar, numstrings + 8);
- for ivar := length(strvar) - 1 downto 0 do
-  setlength(strvar[ivar].txt, numlanguages);
+ for i := length(strvar) - 1 downto 0 do
+  setlength(strvar[i].txt, numlanguages);
 
  // Read the variables into memory.
  while ofsu + 4 < memused do begin
-  lvar := byte((poku + ofsu)^); inc(ofsu); // variable type
-  mvar := byte((poku + ofsu)^); inc(ofsu); // specialness
-  kvar := AddVar(string((poku + ofsu)^), lvar, mvar <> 0);
+  l := byte((poku + ofsu)^); inc(ofsu); // variable type
+  m := byte((poku + ofsu)^); inc(ofsu); // specialness
+  k := AddVar(string((poku + ofsu)^), l, m <> 0);
   inc(ofsu, byte((poku + ofsu)^) + byte(1));
-  jvar := bucket[kvar].content[bucket[kvar].toplink].varnum;
-  if lvar = VARMON_VARTYPEINT then begin
+  j := bucket[k].content[bucket[k].toplink].varnum;
+  if l = VARMON_VARTYPEINT then begin
    // numeric variable!
-   numvar[jvar] := longint((poku + ofsu)^);
+   numvar[j] := longint((poku + ofsu)^);
    inc(ofsu, 4);
   end else begin
    // string variable!
-   ivar := 0;
+   i := 0;
    repeat
-    // numlanguages and savedlanguages are hopefully equal, but if not,
+    // Numlanguages and savedlanguages are hopefully equal, but if not,
     // there are four options for each language index...
-    if ivar < numlanguages then begin
-     if ivar < savedlanguages then begin
+    if i < numlanguages then begin
+     if i < savedlanguages then begin
       // slot is within loaded languages and within languages in snapshot:
       // copy snapshot language string normally
-      setlength(stringstash[ivar], dword((poku + ofsu)^)); inc(ofsu, 4);
-      move((poku + ofsu)^, stringstash[ivar][1], length(stringstash[ivar]));
-      inc(ofsu, dword(length(stringstash[ivar])));
+      setlength(stringstash[i], dword((poku + ofsu)^)); inc(ofsu, 4);
+      move((poku + ofsu)^, stringstash[i][1], length(stringstash[i]));
+      inc(ofsu, dword(length(stringstash[i])));
      end else begin
       // slot is within loaded languages but beyond languages in snapshot:
       // copy language 0 string
-      stringstash[ivar] := stringstash[0];
+      stringstash[i] := stringstash[0];
      end;
     end else begin
-     if ivar < savedlanguages then begin
+     if i < savedlanguages then begin
       // slot is beyond loaded languages but within languages in snapshot:
       // this language string must be dropped, there's nowhere to put it
       inc(ofsu, dword((poku + ofsu)^) + 4);
@@ -363,11 +363,11 @@ begin
      end;
     end;
 
-    inc(ivar);
+    inc(i);
    until FALSE;
-   setlength(strvar[jvar].txt, numlanguages);
-   for ivar := 0 to numlanguages - 1 do
-    strvar[jvar].txt[ivar] := stringstash[ivar];
+   setlength(strvar[j].txt, numlanguages);
+   for i := 0 to numlanguages - 1 do
+    strvar[j].txt[i] := stringstash[i];
   end;
  end;
 end;
@@ -390,72 +390,72 @@ procedure SaveVarState(var poku : pointer);
 //     if string then array[numlanguages] of :
 //       dword : UTF-8 string byte length
 //       array[length] of bytes : UTF-8 string content
-var ivar, jvar, kvar, lvar, mvar, numnumerics, numstrings, memused : dword;
+var i, j, k, l, m, numnumerics, numstrings, memused : dword;
 begin
- // Calculate the memory needed
+ // Calculate the memory needed.
  numnumerics := 0; numstrings := 0;
  memused := 20; // header: 5 dwords
- ivar := bucketcount;
- while ivar <> 0 do begin
-  dec(ivar);
-  jvar := bucket[ivar].bucketsize;
-  while jvar <> 0 do begin
-   dec(jvar);
-   kvar := bucket[ivar].content[jvar].varnum;
-   if bucket[ivar].content[jvar].vartype = VARMON_VARTYPEINT then begin
+ i := bucketcount;
+ while i <> 0 do begin
+  dec(i);
+  j := bucket[i].bucketsize;
+  while j <> 0 do begin
+   dec(j);
+   k := bucket[i].content[j].varnum;
+   if bucket[i].content[j].vartype = VARMON_VARTYPEINT then begin
     // numeric variable!
-    inc(memused, 7 + dword(length(bucket[ivar].content[jvar].namu)));
+    inc(memused, 7 + dword(length(bucket[i].content[j].namu)));
     inc(numnumerics);
    end else begin
     // string variable!
-    mvar := 0;
-    for lvar := numlanguages - 1 downto 0 do
-     inc(mvar, dword(length(strvar[kvar].txt[lvar])));
-    inc(memused, 3 + dword(length(bucket[ivar].content[jvar].namu)) + 4 * numlanguages + mvar);
+    m := 0;
+    for l := numlanguages - 1 downto 0 do
+     inc(m, dword(length(strvar[k].txt[l])));
+    inc(memused, 3 + dword(length(bucket[i].content[j].namu)) + 4 * numlanguages + m);
     inc(numstrings);
    end;
   end;
  end;
 
- // Reserve the memory... caller is responsible for freeing it
+ // Reserve the memory... caller is responsible for freeing it.
  getmem(poku, memused);
 
- // Write the header
+ // Write the header.
  dword((poku + 0)^) := memused;
- ivar := bucketcount;
- if addbucketsautomatically then ivar := ivar or $80000000;
- dword((poku + 4)^) := ivar;
+ i := bucketcount;
+ if addbucketsautomatically then i := i or $80000000;
+ dword((poku + 4)^) := i;
  dword((poku + 8)^) := numnumerics;
  dword((poku + 12)^) := numstrings;
  dword((poku + 16)^) := numlanguages;
  memused := 20;
 
- // Iterate through buckets, saving all variables
- ivar := bucketcount;
- while ivar <> 0 do begin
-  dec(ivar);
-  jvar := bucket[ivar].bucketsize;
-  while jvar <> 0 do begin
-   dec(jvar);
+ // Iterate through buckets, saving all variables.
+ i := bucketcount;
+ while i <> 0 do begin
+  dec(i);
+  j := bucket[i].bucketsize;
+  while j <> 0 do begin
+   dec(j);
 
-   // save common variable description
-   byte((poku + memused)^) := bucket[ivar].content[jvar].vartype; inc(memused);
-   byte((poku + memused)^) := bucket[ivar].content[jvar].special; inc(memused);
-   move(bucket[ivar].content[jvar].namu[0], (poku + memused)^, length(bucket[ivar].content[jvar].namu) + 1);
-   inc(memused, dword(length(bucket[ivar].content[jvar].namu)) + 1);
+   // Save a description of the variable.
+   byte((poku + memused)^) := bucket[i].content[j].vartype; inc(memused);
+   byte((poku + memused)^) := bucket[i].content[j].special; inc(memused);
+   move(bucket[i].content[j].namu[0], (poku + memused)^, length(bucket[i].content[j].namu) + 1);
+   inc(memused, dword(length(bucket[i].content[j].namu)) + 1);
 
-   kvar := bucket[ivar].content[jvar].varnum;
-   if bucket[ivar].content[jvar].vartype = VARMON_VARTYPEINT then begin
+   k := bucket[i].content[j].varnum;
+   if bucket[i].content[j].vartype = VARMON_VARTYPEINT then begin
     // numeric variable!
-    longint((poku + memused)^) := numvar[kvar];
+    longint((poku + memused)^) := numvar[k];
     inc(memused, 4);
    end else begin
     // string variable!
-    for lvar := 0 to numlanguages - 1 do begin
-     dword((poku + memused)^) := length(strvar[kvar].txt[lvar]);
+    for l := 0 to numlanguages - 1 do begin
+     dword((poku + memused)^) := length(strvar[k].txt[l]);
      inc(memused, 4);
-     move(strvar[kvar].txt[lvar][1], (poku + memused)^, length(strvar[kvar].txt[lvar]));
-     inc(memused, dword(length(strvar[kvar].txt[lvar])));
+     move(strvar[k].txt[l][1], (poku + memused)^, length(strvar[k].txt[l]));
+     inc(memused, dword(length(strvar[k].txt[l])));
     end;
    end;
 
@@ -465,87 +465,87 @@ end;
 
 function GetVarType(const varnamu : string) : byte;
 // Returns the variable type, VARMON_VARTYPE*.
-var ivar : dword;
+var i : dword;
 begin
  GetVarType := VARMON_VARTYPENULL;
- ivar := FindVar(upcase(varnamu));
- if ivar >= $80000000 then exit; // variable doesn't exist
- GetVarType := bucket[ivar].content[bucket[ivar].toplink].vartype;
+ i := FindVar(upcase(varnamu));
+ if i >= $80000000 then exit; // variable doesn't exist
+ GetVarType := bucket[i].content[bucket[i].toplink].vartype;
 end;
 
 procedure SetNumVar(const varnamu : string; num : longint; sudo : boolean);
 // Assigns the given number to the variable by the given name.
 // If the variable is write-protected, throws an exception. Unless sudo is
 // true, then writes regardless of protection.
-var ivar, jvar : dword;
+var i, j : dword;
 begin
- ivar := AddVar(upcase(varnamu), 1, sudo);
- jvar := bucket[ivar].toplink;
- if (bucket[ivar].content[jvar].special <> 0) // write-protected
+ i := AddVar(upcase(varnamu), 1, sudo);
+ j := bucket[i].toplink;
+ if (bucket[i].content[j].special <> 0) // write-protected
  and (sudo = FALSE) then
   raise Exception.create('Variable ' + varnamu + ' is write-protected');
 
- numvar[bucket[ivar].content[jvar].varnum] := num;
+ numvar[bucket[i].content[j].varnum] := num;
 end;
 
 function GetNumVar(const varnamu : string) : longint;
 // Returns the value of the given variable, or 0 if that doesn't exist.
 // If the requested variable is a string, also returns 0. If a string
 // contains a valid number, it must be converted explicitly by script code.
-var ivar, jvar : dword;
+var i, j : dword;
 begin
  GetNumVar := 0;
- ivar := FindVar(upcase(varnamu));
- if ivar >= $80000000 then exit; // variable doesn't exist
- jvar := bucket[ivar].toplink;
- if bucket[ivar].content[jvar].vartype <> VARMON_VARTYPEINT then exit;
- GetNumVar := numvar[bucket[ivar].content[jvar].varnum];
+ i := FindVar(upcase(varnamu));
+ if i >= $80000000 then exit; // variable doesn't exist
+ j := bucket[i].toplink;
+ if bucket[i].content[j].vartype <> VARMON_VARTYPEINT then exit;
+ GetNumVar := numvar[bucket[i].content[j].varnum];
 end;
 
 procedure SetStrVar(const varnamu : string; sudo : boolean);
 // Assigns the contents of the string stash to the given string variable.
 // If the variable is write-protected, throws an exception. Unless sudo is
 // true, then writes regardless of protection.
-var ivar, jvar, lvar : dword;
+var i, j, l : dword;
 begin
- ivar := AddVar(upcase(varnamu), 2, sudo);
- jvar := bucket[ivar].toplink;
- if (bucket[ivar].content[jvar].special <> 0) // write-protected
+ i := AddVar(upcase(varnamu), 2, sudo);
+ j := bucket[i].toplink;
+ if (bucket[i].content[j].special <> 0) // write-protected
  and (sudo = FALSE) then
   raise Exception.create('Variable ' + varnamu + ' is write-protected');
 
- setlength(strvar[bucket[ivar].content[jvar].varnum].txt, numlanguages);
- for lvar := 0 to numlanguages - 1 do
-  strvar[bucket[ivar].content[jvar].varnum].txt[lvar] := stringstash[lvar];
+ setlength(strvar[bucket[i].content[j].varnum].txt, numlanguages);
+ for l := 0 to numlanguages - 1 do
+  strvar[bucket[i].content[j].varnum].txt[l] := stringstash[l];
 end;
 
 procedure GetStrVar(const varnamu : string);
 // Fetches the given string variables and places a copy of them in the
 // string stash. If the given variable doesn't exist, places empty strings.
 // If the requested variable is a number, returns a string representation.
-var ivar, jvar, lvar : dword;
+var i, j, l : dword;
 begin
- ivar := FindVar(upcase(varnamu));
- if ivar >= $80000000 then begin
+ i := FindVar(upcase(varnamu));
+ if i >= $80000000 then begin
   // variable doesn't exist
-  for jvar := numlanguages - 1 downto 0 do stringstash[jvar] := '';
+  for j := numlanguages - 1 downto 0 do stringstash[j] := '';
   exit;
  end;
- jvar := bucket[ivar].toplink;
- if bucket[ivar].content[jvar].vartype = VARMON_VARTYPEINT then begin
+ j := bucket[i].toplink;
+ if bucket[i].content[j].vartype = VARMON_VARTYPEINT then begin
   // numeric variable, convert to string
-  ivar := bucket[ivar].content[jvar].varnum;
-  stringstash[0] := strdec(numvar[ivar]);
-  jvar := numlanguages - 1;
-  while jvar > 0 do begin
-   stringstash[jvar] := stringstash[0];
-   dec(jvar);
+  i := bucket[i].content[j].varnum;
+  stringstash[0] := strdec(numvar[i]);
+  j := numlanguages - 1;
+  while j > 0 do begin
+   stringstash[j] := stringstash[0];
+   dec(j);
   end;
   exit;
  end;
 
- for lvar := 0 to numlanguages - 1 do
-  stringstash[lvar] := strvar[bucket[ivar].content[jvar].varnum].txt[lvar];
+ for l := 0 to numlanguages - 1 do
+  stringstash[l] := strvar[bucket[i].content[j].varnum].txt[l];
 end;
 
 procedure SetNumBuckets(const newbuckets : dword);
@@ -588,7 +588,7 @@ procedure VarmonInit(numlang, numbuckets : dword);
 // preferred number of variable buckets. The number of languages is known at
 // game mod load and should not change. The number of buckets may be changed
 // at runtime using SetNumBuckets.
-var ivar : dword;
+var i : dword;
 begin
  // safeties
  if numlang = 0 then numlang := 1;
@@ -600,7 +600,7 @@ begin
  numlanguages := numlang;
  setlength(bucket, 0);
  setlength(bucket, numbuckets);
- for ivar := numbuckets - 1 downto 0 do with bucket[ivar] do begin
+ for i := numbuckets - 1 downto 0 do with bucket[i] do begin
   bucketsize := 0;
   setlength(content, 0);
  end;
