@@ -270,11 +270,12 @@ begin
  if poku = NIL then exit;
  memused := dword(poku^);
  if memused < 20 then exit;
- bucketcount := dword((poku + 4)^);
+ ivar := dword((poku + 4)^);
  numnumerics := dword((poku + 8)^);
  numstrings := dword((poku + 12)^);
  savedlanguages := dword((poku + 16)^);
- if (bucketcount = 0) or (savedlanguages = 0) then exit;
+ if (ivar = 0) or (savedlanguages = 0) then exit;
+ bucketcount := ivar;
  ofsu := 20;
 
  // clear and re-init everything
