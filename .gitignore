@@ -2,7 +2,11 @@
 !*.*
 !*/
 
-test*
+test.*
 *.exe
 *.ppu
 *.o
+*.bak
+fp.*
+fp___.*
+
