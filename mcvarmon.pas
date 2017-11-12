@@ -69,6 +69,7 @@ function CountBuckets : dword;
 procedure VarmonInit(numlang, numbuckets : dword);
 
 const VARMON_MAXBUCKETS = 999999;
+const VARMON_MAXLANGUAGES = 999;
 var stringstash : array of UTF8string;
 
 // ------------------------------------------------------------------
@@ -561,6 +562,7 @@ var ivar : dword;
 begin
  // safeties
  if numlang = 0 then numlang := 1;
+ if numlang > VARMON_MAXLANGUAGES then numlang := VARMON_MAXLANGUAGES;
  if numbuckets = 0 then numbuckets := 1;
  if numbuckets > VARMON_MAXBUCKETS then numbuckets := VARMON_MAXBUCKETS;
  // inits
