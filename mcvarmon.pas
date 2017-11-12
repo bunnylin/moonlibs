@@ -65,6 +65,7 @@ procedure GetStrVar(const varnamu : string);
 procedure SetNumBuckets(const newbuckets : dword);
 procedure VarmonInit(numlang, numbuckets : dword);
 
+const VARMON_MAXBUCKETS = 999999;
 var stringstash : array of UTF8string;
 
 // ------------------------------------------------------------------
@@ -506,7 +507,8 @@ procedure SetNumBuckets(const newbuckets : dword);
 // few variables, a small number of buckets keeps the memory overhead low.
 var poku : pointer;
 begin
- if (newbuckets = 0) or (newbuckets = bucketcount) then exit;
+ if (newbuckets = 0) or (newbuckets = bucketcount)
+ or (newbuckets > VARMON_MAXBUCKETS) then exit;
  poku := NIL;
  SaveVarState(poku);
  dword((poku + 4)^) := newbuckets; // poke bucketcount in saved structure
@@ -524,6 +526,7 @@ begin
  // safeties
  if numlang = 0 then numlang := 1;
  if numbuckets = 0 then numbuckets := 1;
+ if numbuckets > VARMON_MAXBUCKETS then numbuckets := VARMON_MAXBUCKETS;
  // inits
  bucketcount := numbuckets;
  numlanguages := numlang;
