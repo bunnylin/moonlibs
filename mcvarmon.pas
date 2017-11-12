@@ -63,6 +63,9 @@ function GetNumVar(const varnamu : string) : longint;
 procedure SetStrVar(const varnamu : string; sudo : boolean);
 procedure GetStrVar(const varnamu : string);
 procedure SetNumBuckets(const newbuckets : dword);
+function CountNumVars : dword;
+function CountStrVars : dword;
+function CountBuckets : dword;
 procedure VarmonInit(numlang, numbuckets : dword);
 
 const VARMON_MAXBUCKETS = 999999;
@@ -514,6 +517,21 @@ begin
  dword((poku + 4)^) := newbuckets; // poke bucketcount in saved structure
  LoadVarState(poku);
  freemem(poku); poku := NIL;
+end;
+
+function CountNumVars : dword;
+begin
+ CountNumVars := numvarcount;
+end;
+
+function CountStrVars : dword;
+begin
+ CountStrVars := strvarcount;
+end;
+
+function CountBuckets : dword;
+begin
+ CountBuckets := bucketcount;
 end;
 
 procedure VarmonInit(numlang, numbuckets : dword);
