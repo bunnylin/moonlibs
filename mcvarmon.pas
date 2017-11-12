@@ -51,9 +51,13 @@ unit mcvarmon;
 // should not be allowed for) can read but not write these variables.
 
 // ------------------------------------------------------------------
+
+{$mode objfpc}
+{$codepage UTF8}
+
 interface
 
-uses mccommon;
+uses mccommon, sysutils;
 
 procedure LoadVarState(poku : pointer);
 procedure SaveVarState(var poku : pointer);
@@ -210,7 +214,8 @@ begin
   with bucket[AddVar].content[bucket[AddVar].toplink] do begin
    // check if it's write-protected and can't be changed
    if sudo = FALSE then begin
-    if special and 1 <> 0 then exit;
+    if special and 1 <> 0 then
+     raise Exception.create('Variable ' + varnamu + ' is write-protected');
     special := 0;
    end
    else special := 1;
@@ -279,29 +284,39 @@ procedure LoadVarState(poku : pointer);
 // snapshot, the extra language string variables are dropped. If the current
 // languages is greater, then language 0 is copied to the extra languages.
 // The caller is responsible for freeing the buffer.
+// The savestate buffer is not robustly checked for correctness, beware.
 var ivar, jvar, kvar, lvar, mvar, ofsu : dword;
-    memused, numnumerics, numstrings, savedlanguages : dword;
+    memused, savedbuckets, numnumerics, numstrings, savedlanguages : dword;
 begin
- // safeties, read the header
- if poku = NIL then exit;
+ // Safeties, read the header.
+ if poku = NIL then raise Exception.create('LoadVarState: tried to load null');
  memused := dword(poku^);
- if memused < 20 then exit;
- ivar := dword((poku + 4)^);
+ if memused < 20 then raise Exception.create('LoadVarState: state too small, corrupted?');
+ savedbuckets := dword((poku + 4)^);
+ addbucketsautomatically := (savedbuckets and $80000000) <> 0;
+ savedbuckets := savedbuckets and $7FFFFFFF;
+ if savedbuckets = 0 then raise Exception.create('LoadVarState: state numbuckets = 0');
+ if savedbuckets > VARMON_MAXBUCKETS then raise Exception.create('LoadVarState: state numbuckets > max');
  numnumerics := dword((poku + 8)^);
  numstrings := dword((poku + 12)^);
  savedlanguages := dword((poku + 16)^);
- if (ivar = 0) or (savedlanguages = 0) then exit;
- bucketcount := ivar;
+ if savedlanguages = 0 then raise Exception.create('LoadVarState: state savedlanguages = 0');
+ if savedlanguages > VARMON_MAXLANGUAGES then raise Exception.create('LoadVarState: state savedlanguages > max');
  ofsu := 20;
 
- // clear and re-init everything
- VarmonInit(numlanguages, bucketcount);
+ // Clear and re-init everything.
+ // Note, that this will not change numlanguages, even if the savestate has
+ // a different language count! Numlanguages can only be equal to however
+ // many languages the caller currently has available. So while loading
+ // a state, any extra saved languages are dropped; if the state is missing
+ // languages, then language 0 is substituted for the missing strings.
+ VarmonInit(numlanguages, savedbuckets);
  setlength(numvar, numnumerics + 8);
  setlength(strvar, numstrings + 8);
  for ivar := length(strvar) - 1 downto 0 do
   setlength(strvar[ivar].txt, numlanguages);
 
- // read the variables into memory
+ // Read the variables into memory.
  while ofsu + 4 < memused do begin
   lvar := byte((poku + ofsu)^); inc(ofsu); // variable type
   mvar := byte((poku + ofsu)^); inc(ofsu); // specialness
@@ -360,6 +375,7 @@ procedure SaveVarState(var poku : pointer);
 // Snapshot content:
 //   dword : byte size of used memory including this dword
 //   dwords : bucketcount, numnumerics, numstrings, numlanguages
+//     (except bucketcount's top bit is addbucketsautomatically)
 //   array[numnumerics + numstrings] of :
 //     byte : variable type
 //     byte : specialness value
@@ -398,7 +414,9 @@ begin
 
  // Write the header
  dword((poku + 0)^) := memused;
- dword((poku + 4)^) := bucketcount;
+ ivar := bucketcount;
+ if addbucketsautomatically then ivar := ivar or $80000000;
+ dword((poku + 4)^) := ivar;
  dword((poku + 8)^) := numnumerics;
  dword((poku + 12)^) := numstrings;
  dword((poku + 16)^) := numlanguages;
@@ -448,15 +466,16 @@ end;
 
 procedure SetNumVar(const varnamu : string; num : longint; sudo : boolean);
 // Assigns the given number to the variable by the given name.
-// If the variable is write-protected, fails silently. :p Unless sudo is
+// If the variable is write-protected, throws an exception. Unless sudo is
 // true, then writes regardless of protection.
 var ivar, jvar : dword;
 begin
  ivar := AddVar(upcase(varnamu), 1, sudo);
  jvar := bucket[ivar].toplink;
  if (bucket[ivar].content[jvar].special <> 0) // write-protected
- and (sudo = FALSE)
- then exit;
+ and (sudo = FALSE) then
+  raise Exception.create('Variable ' + varnamu + ' is write-protected');
+
  numvar[bucket[ivar].content[jvar].varnum] := num;
 end;
 
@@ -476,15 +495,16 @@ end;
 
 procedure SetStrVar(const varnamu : string; sudo : boolean);
 // Assigns the contents of the string stash to the given string variable.
-// If the variable is write-protected, fails silently. :p Unless sudo is
+// If the variable is write-protected, throws an exception. Unless sudo is
 // true, then writes regardless of protection.
 var ivar, jvar, lvar : dword;
 begin
  ivar := AddVar(upcase(varnamu), 2, sudo);
  jvar := bucket[ivar].toplink;
  if (bucket[ivar].content[jvar].special <> 0) // write-protected
- and (sudo = FALSE)
- then exit;
+ and (sudo = FALSE) then
+  raise Exception.create('Variable ' + varnamu + ' is write-protected');
+
  setlength(strvar[bucket[ivar].content[jvar].varnum].txt, numlanguages);
  for lvar := 0 to numlanguages - 1 do
   strvar[bucket[ivar].content[jvar].varnum].txt[lvar] := stringstash[lvar];
@@ -527,8 +547,9 @@ procedure SetNumBuckets(const newbuckets : dword);
 // few variables, a small number of buckets keeps the memory overhead low.
 var poku : pointer;
 begin
- if (newbuckets = 0) or (newbuckets = bucketcount)
- or (newbuckets > VARMON_MAXBUCKETS) then exit;
+ if newbuckets = bucketcount then exit;
+ if (newbuckets = 0) or (newbuckets > VARMON_MAXBUCKETS) then
+  raise Exception.create('Bad new bucketcount, must be 1..' + strdec(VARMON_MAXBUCKETS));
  poku := NIL;
  SaveVarState(poku);
  dword((poku + 4)^) := newbuckets; // poke bucketcount in saved structure
@@ -562,7 +583,7 @@ var ivar : dword;
 begin
  // safeties
  if numlang = 0 then numlang := 1;
- if numlang > VARMON_MAXLANGUAGES then numlang := VARMON_MAXLANGUAGES;
+ if numlang > VARMON_MAXLANGUAGES then raise Exception.create('Tried to init with ' + strdec(numlang) + ' languages, max ' + strdec(VARMON_MAXLANGUAGES));
  if numbuckets = 0 then numbuckets := 1;
  if numbuckets > VARMON_MAXBUCKETS then numbuckets := VARMON_MAXBUCKETS;
  // inits
@@ -575,14 +596,16 @@ begin
   setlength(content, 0);
  end;
  setlength(stringstash, numlang);
-end;
 
-// ------------------------------------------------------------------
-initialization
  numvarcount := 0; strvarcount := 0; danglies := 0;
  setlength(numvar, 0);
  setlength(strvar, 0);
  addbucketsautomatically := TRUE;
+end;
+
+// ------------------------------------------------------------------
+initialization
+ VarmonInit(1, 1);
 
 // ------------------------------------------------------------------
 finalization
