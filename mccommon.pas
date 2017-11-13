@@ -114,11 +114,11 @@ function CompStr(str1p, str2p : pointer; str1len, str2len : dword) : longint;
 // For sorting: returns 0 if str1 = str2, a positive value if str1 > str2,
 // and a negative value if str1 < str2. The value is equal to the difference
 // between the first differing character.
-var ivar : dword;
+var i : dword;
 begin
- ivar := str1len;
- if str1len > str2len then ivar := str2len;
- CompStr := CompareByte(str1p^, str2p^, ivar);
+ i := str1len;
+ if str1len > str2len then i := str2len;
+ CompStr := CompareByte(str1p^, str2p^, i);
  if CompStr = 0 then begin
   if str1len = str2len then exit;
   inc(CompStr);
@@ -165,7 +165,7 @@ function MatchString(const str1, str2 : UTF8string; var ofs : dword) : boolean;
 // If an exact match was found, also moves ofs to point to the offset in
 // str1 after the last matched character. Otherwise doesn't modify ofs.
 // Ofs is 1-based.
-var ivar, str2len : dword;
+var i, str2len : dword;
     str1ofs, str2ofs : pointer;
 begin
  MatchString := FALSE;
@@ -176,21 +176,21 @@ begin
  // First do dword compares.
  str1ofs := @str1[ofs];
  str2ofs := @str2[1];
- ivar := str2len shr 2;
- while ivar <> 0 do begin
+ i := str2len shr 2;
+ while i <> 0 do begin
   if dword(str1ofs^) <> dword(str2ofs^) then exit;
   inc(str1ofs, 4);
   inc(str2ofs, 4);
-  dec(ivar);
+  dec(i);
  end;
 
  // Finally do byte compares.
- ivar := str2len and 3;
- while ivar <> 0 do begin
+ i := str2len and 3;
+ while i <> 0 do begin
   if byte(str1ofs^) <> byte(str2ofs^) then exit;
   inc(str1ofs);
   inc(str2ofs);
-  dec(ivar);
+  dec(i);
  end;
 
  // Made it all the way, found a match!
@@ -199,22 +199,22 @@ begin
 end;
 
 procedure DumpBuffer(buffy : pointer; buflen : dword);
-{$ifdef dumpbufferaltstyle}
 // Prints out the given memory region as standard output in a human-readable
 // format: offsets in the left column, bytes in plain hex in the middle, and
 // an ascii representation in the right column.
 // Widths: 6 offset, 3 spacer, 16 x 3 bytes with 4x2 spacers, 16 ascii
-var ascii, strutsi : string;
+{$ifndef dumpbufferaltstyle}
+var ascii : string;
     bufofs : dword;
 begin
+ ascii := '';
  bufofs := 0;
  while buflen <> 0 do begin
   dec(buflen);
 
   // Start of row: print offset.
   if bufofs and $F = 0 then begin
-   strutsi := strhex(bufofs);
-   write(space(6 - length(strutsi)) + strutsi + ':  ');
+   write(strhex(bufofs shr 16) + strhex((bufofs shr 8) and $FF) + strhex(bufofs and $FF) + ':  ');
    ascii := '';
   end;
 
@@ -224,9 +224,9 @@ begin
   else write(strhex(byte(buffy^)) + ' ');
   inc(byte(ascii[0]));
   // Construct the ascii representation while at it.
-  if byte(buffy^) in [0..31, 255]
-  then ascii[byte(ascii[0])] := '.'
-  else ascii[byte(ascii[0])] := char(buffy^);
+  if byte(buffy^) in [32..126]
+  then ascii[byte(ascii[0])] := char(buffy^)
+  else ascii[byte(ascii[0])] := '.';
 
   // End of row: print ascii representation.
   if bufofs and $F = 0 then writeln(ascii);
