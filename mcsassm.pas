@@ -374,16 +374,16 @@ function GetScr(const nam : UTF8string) : dword;
 // given name. If the script is not in the list, returns 0.
 // The search is case-sensitive, but all script names shall be in uppercase.
 // The script[] array must be sorted before calling this.
-var ivar, min, max : longint;
+var i, min, max : longint;
 begin
  if (nam = '') or (high(script) = 0) then begin GetScr := 0; exit; end;
  // binary search
  min := 1; max := high(script);
  repeat
   GetScr := (min + max) shr 1;
-  ivar := CompStr(@nam[1], @script[GetScr].labelnamu[1], length(nam), length(script[GetScr].labelnamu));
-  if ivar = 0 then exit;
-  if ivar > 0 then min := GetScr + 1 else max := GetScr - 1;
+  i := CompStr(@nam[1], @script[GetScr].labelnamu[1], length(nam), length(script[GetScr].labelnamu));
+  if i = 0 then exit;
+  if i > 0 then min := GetScr + 1 else max := GetScr - 1;
  until min > max;
  GetScr := 0;
 end;
@@ -395,16 +395,16 @@ function GetPNG(const nam : UTF8string) : dword;
 // PNGlist[] is a mostly constant list that must be sorted before calling.
 // For each image, the list contains some metadata and a reference to a DAT
 // file that holds the compressed PNG stream.
-var ivar, min, max : longint;
+var i, min, max : longint;
 begin
  if (nam = '') or (high(PNGlist) = 0) then begin GetPNG := 0; exit; end;
  // binary search
  min := 1; max := high(PNGlist);
  repeat
   GetPNG := (min + max) shr 1;
-  ivar := CompStr(@nam[1], @PNGlist[GetPNG].namu[1], length(nam), length(PNGlist[GetPNG].namu));
-  if ivar = 0 then exit;
-  if ivar > 0 then min := GetPNG + 1 else max := GetPNG - 1;
+  i := CompStr(@nam[1], @PNGlist[GetPNG].namu[1], length(nam), length(PNGlist[GetPNG].namu));
+  if i = 0 then exit;
+  if i > 0 then min := GetPNG + 1 else max := GetPNG - 1;
  until min > max;
  GetPNG := 0;
 end;
@@ -419,7 +419,7 @@ function CacheGFX(const nam : UTF8string; rqsizex, rqsizey : word; sacrflag : bo
 // in the prepared gfxlist[] slot.
 // If sacrflag is set, the slot is immediately marked as sacred so even after
 // it is loaded, it absolutely cannot be freed until ReleaseGFX is called.
-var ivar : dword;
+var i : dword;
 
   function ListThis(listsizex, listsizey : dword) : dword;
   begin
@@ -460,25 +460,25 @@ var ivar : dword;
    with gfxlist[ListThis] do begin
     writelog('Cache ' + nam + ' @ size ' + strdec(listsizex) + 'x' + strdec(listsizey) + ' -> gfxlist[' + strdec(ListThis) + ']');
     namu := nam;
-    // don't know if it's RGBA or RGB until it's loaded...
+    // Don't know if it's RGBA or RGB until it's loaded...
     bitflag := 0;
-    // we need to convert the original offset and size to the new resolution,
+    // We need to convert the original offset and size to the new resolution,
     // using a direct size/size multiplier.
     // Since we need sub-pixel accuracy, the offset must be rounded down, and
     // the size must be rounded up; in other words, any pixel row or column
     // in which the resized graphic is in even fractionally must count as
     // a full row/column.
     // This same calculation is done again in LoadGFX.
-    ofsxp := (PNGlist[ivar].origofsxp * longint(listsizex)) div PNGlist[ivar].origsizexp;
-    if PNGlist[ivar].origofsxp < 0 then dec(ofsxp);
-    ofsyp := (PNGlist[ivar].origofsyp * longint(listsizey)) div PNGlist[ivar].origframeheightp;
-    if PNGlist[ivar].origofsyp < 0 then dec(ofsyp);
+    ofsxp := (PNGlist[i].origofsxp * longint(listsizex)) div PNGlist[i].origsizexp;
+    if PNGlist[i].origofsxp < 0 then dec(ofsxp);
+    ofsyp := (PNGlist[i].origofsyp * longint(listsizey)) div PNGlist[i].origframeheightp;
+    if PNGlist[i].origofsyp < 0 then dec(ofsyp);
 
     sizexp := listsizex;
     frameheightp := listsizey;
-    sizeyp := frameheightp * PNGlist[ivar].framecount;
+    sizeyp := frameheightp * PNGlist[i].framecount;
 
-    // bookkeeping
+    // Bookkeeping...
     newerlink := 0;
     olderlink := gfxlist[0].olderlink;
     gfxlist[0].olderlink := ListThis;
@@ -503,22 +503,22 @@ begin
  end;
 
  // Not found at the requested size! Does the PNG exist at all?
- ivar := GetPNG(nam);
- if ivar = 0 then begin
+ i := GetPNG(nam);
+ if i = 0 then begin
   writelog('[!] CacheGFX: PNG not found: ' + nam);
   exit;
  end;
 
  // Are we asking for a resized version of the image?
- if (rqsizex <> PNGlist[ivar].origsizexp)
- or (rqsizey <> PNGlist[ivar].origframeheightp)
+ if (rqsizex <> PNGlist[i].origsizexp)
+ or (rqsizey <> PNGlist[i].origframeheightp)
  then begin
   // Is the graphic already cached at its original size?
-  CacheGFX := seekgfx(nam, PNGlist[ivar].origsizexp, PNGlist[ivar].origframeheightp);
+  CacheGFX := seekgfx(nam, PNGlist[i].origsizexp, PNGlist[i].origframeheightp);
 
   // NO: request the original size version.
   if CacheGFX = 0 then
-   ListThis(PNGlist[ivar].origsizexp, PNGlist[ivar].origframeheightp)
+   ListThis(PNGlist[i].origsizexp, PNGlist[i].origframeheightp)
 
   // YES: mark the original size version as recently accessed.
   else if (gfxlist[CacheGFX].cachestate in [1..2])
@@ -555,14 +555,14 @@ function GetGFX(const nam : UTF8string; rqsizex, rqsizey : word) : dword;
 // Do not call this from the cacher thread!
 begin
  RTLEventResetEvent(asman_jobdone);
- // First, find the gfxlist[] slot where this graphic is expected to be
+ // First, find the gfxlist[] slot where this graphic is expected to be.
  GetGFX := seekgfx(nam, rqsizex, rqsizey);
- // not found? in that case, must submit a caching request for it
+ // Not found? in that case, must submit a caching request for it.
  if GetGFX = 0 then GetGFX := CacheGFX(nam, rqsizex, rqsizey, TRUE);
 
  // Has the graphic been cached yet?
  if gfxlist[GetGFX].cachestate < 3 then begin
-  // Nope! Tell the cacher this is a prime slot and go to sleep
+  // Nope! Tell the cacher this is a prime slot and go to sleep.
   writelog('waiting for gfxload');
   gfxlist[GetGFX].sacred := TRUE;
   asman_primeslot := GetGFX;
@@ -583,23 +583,23 @@ procedure ReleaseGFX;
 // done drawing those bitmaps for now. As the graphics are released, they are
 // also moved to the front of the recently-used queue, so when it's necessary
 // to unload graphics, the least recently used ones are unloaded first.
-var ivar : dword;
+var i : dword;
 begin
  // If gfxmemlimit has been exceeded, purge some old state-3 slots!
- ivar := 0;
+ i := 0;
  while (asman_gfxmemcount > asman_gfxmemlimit)
- and (gfxlist[ivar].newerlink <> 0) do begin
-  ivar := gfxlist[ivar].newerlink;
-  if (gfxlist[ivar].cachestate = 3) and (gfxlist[ivar].sacred = FALSE)
-  then asman_purgegfx(ivar);
+ and (gfxlist[i].newerlink <> 0) do begin
+  i := gfxlist[i].newerlink;
+  if (gfxlist[i].cachestate = 3) and (gfxlist[i].sacred = FALSE)
+  then asman_purgegfx(i);
  end;
- // Clear all sacred flags and sort them to most recent
- ivar := 0;
- while (gfxlist[ivar].olderlink <> 0) do begin
-  ivar := gfxlist[ivar].olderlink;
-  if (gfxlist[ivar].cachestate = 3) and (gfxlist[ivar].sacred) then begin
-   gfxlist[ivar].sacred := FALSE;
-   setmostrecent(ivar);
+ // Clear all sacred flags and sort them to most recent.
+ i := 0;
+ while (gfxlist[i].olderlink <> 0) do begin
+  i := gfxlist[i].olderlink;
+  if (gfxlist[i].cachestate = 3) and (gfxlist[i].sacred) then begin
+   gfxlist[i].sacred := FALSE;
+   setmostrecent(i);
   end;
  end;
 end;
@@ -644,7 +644,7 @@ procedure LoadGFX(slotnum : dword);
 // outside the thread. Instead, you should either use CacheGFX to
 // request the cacher thread to precache an image, or call GetGFX to
 // immediately get the image you need.
-var ivar, jvar, kvar : dword;
+var i, j, k : dword;
     PNGindex, origsizeindex : dword;
 
     loopz, muah, argh, red, green, blue : dword;
@@ -664,20 +664,20 @@ var ivar, jvar, kvar : dword;
   var newimu : pointer;
       infilu : file;
       bemari : bitmaptype;
-      errcode, lvar : dword;
+      errcode, l : dword;
   begin
    LoadGFX_LoadPNG := FALSE;
    while IOresult <> 0 do ; // flush
-   // Try to open the file and read the PNG into memory
+   // Try to open the file and read the PNG into memory.
    assign(infilu, PNGlist[PNGindex].srcfilename);
-   lvar := 16;
+   l := 16;
    repeat
     filemode := 0; reset(infilu, 1); // read-only access
     errcode := IOresult;
     if errcode = 0 then break;
-    dec(lvar);
+    dec(l);
     ThreadSwitch; // give up our timeslice
-   until lvar = 0;
+   until l = 0;
 
    if errcode <> 0 then begin
     writelog('[ERROR] LoadGFX: error ' + strdec(errcode) + ' while opening ' + PNGlist[PNGindex].srcfilename);
@@ -701,7 +701,7 @@ var ivar, jvar, kvar : dword;
     exit;
    end;
 
-   // Unpack the image
+   // Unpack the image.
    bemari.image := NIL;
    errcode := mcg_PNGtoMemory(newimu, PNGlist[PNGindex].srcfilesizu, @bemari);
    freemem(newimu); newimu := NIL;
@@ -721,7 +721,7 @@ var ivar, jvar, kvar : dword;
    else begin
     // Expand 24bpp into 32bpp with a fully opaque alpha channel.
     getmem(newimu, bemari.sizex * bemari.sizey * 4);
-    for lvar := bemari.sizex * bemari.sizey - 1 downto 0 do begin
+    for l := bemari.sizex * bemari.sizey - 1 downto 0 do begin
      dword(newimu^) := dword(bemari.image^) or $FF000000;
      inc(newimu, 4); inc(bemari.image, 3);
     end;
@@ -735,7 +735,7 @@ var ivar, jvar, kvar : dword;
    gfxlist[thisslot].bitmap := bemari.image;
    bemari.image := NIL;
 
-   // track memory usage
+   // Track memory usage.
    interlockedexchangeadd(asman_gfxmemcount, bemari.sizex * bemari.sizey shl 2);
    WriteBarrier; // not needed on x86/x64, but I'm paranoid...
    gfxlist[thisslot].cachestate := 3;
@@ -745,7 +745,7 @@ var ivar, jvar, kvar : dword;
   end;
 
   procedure LoadGFX_FillGradient;
-  // Generate a shaded rectangle and pretend that's what they asked for
+  // Generate a shaded rectangle and pretend that's what they asked for.
   var gp : pointer;
       xx, yy : dword;
   begin
@@ -789,7 +789,7 @@ var ivar, jvar, kvar : dword;
     gp := NIL;
     dword(bitmap^) := $FFFFFFFF; // white top left
     dword((bitmap + (sizexp * sizeyp - 1) shl 2)^) := $FF000000; // black low right
-    // track memory usage
+    // Track memory usage.
     interlockedexchangeadd(asman_gfxmemcount, sizexp * sizeyp shl 2);
     WriteBarrier; // not needed on x86/x64, but I'm paranoid...
     cachestate := 3;
@@ -817,7 +817,7 @@ var ivar, jvar, kvar : dword;
    then ideal2 := (origofs2 * targetsize - origsize shr 1) div origsize
    else ideal2 := (origofs2 * targetsize + origsize shr 1) div origsize;
 
-   // test 16x16 combinations, find lowest squared edge deviation
+   // Test 16x16 combinations, find lowest squared edge deviation.
    pad1 := 16;
    lowestdev := $FFFFFFFF; // lowest deviation amount
    while pad1 <> 0 do begin
@@ -954,37 +954,37 @@ begin
  // So let's just resize normally and optimise the display elsewhere.
 
  gfxlist[slotnum].bitflag := gfxlist[slotnum].bitflag or (gfxlist[origsizeindex].bitflag and 128);
- ivar := PNGlist[PNGindex].framecount;
- jvar := PNGlist[PNGindex].origsizexp * PNGlist[PNGindex].origframeheightp * 4;
+ i := PNGlist[PNGindex].framecount;
+ j := PNGlist[PNGindex].origsizexp * PNGlist[PNGindex].origframeheightp * 4;
  if gfxlist[slotnum].bitmap <> NIL then begin freemem(gfxlist[slotnum].bitmap); gfxlist[slotnum].bitmap := NIL; end;
  setlength(framu.palette, 0);
  framu.memformat := 1;
  framu.bitdepth := 8;
  // Image with a single frame.
- if ivar = 1 then begin
+ if i = 1 then begin
   framu.sizex := PNGlist[PNGindex].origsizexp;
   framu.sizey := PNGlist[PNGindex].origsizeyp;
-  getmem(framu.image, jvar);
-  move(gfxlist[origsizeindex].bitmap^, framu.image^, jvar);
+  getmem(framu.image, j);
+  move(gfxlist[origsizeindex].bitmap^, framu.image^, j);
   mcg_ScaleBitmap(@framu, gfxlist[slotnum].sizexp, gfxlist[slotnum].sizeyp);
   gfxlist[slotnum].bitmap := framu.image; framu.image := NIL;
  end else begin
   // Image with multiple frames.
-  kvar := gfxlist[slotnum].sizexp * gfxlist[slotnum].frameheightp * 4;
-  getmem(gfxlist[slotnum].bitmap, kvar * ivar);
+  k := gfxlist[slotnum].sizexp * gfxlist[slotnum].frameheightp * 4;
+  getmem(gfxlist[slotnum].bitmap, k * i);
   muah := 0; // source ofs
   argh := 0; // dest ofs
-  while ivar <> 0 do begin // for every frame...
-   dec(ivar);
+  while i <> 0 do begin // for every frame...
+   dec(i);
    framu.sizex := PNGlist[PNGindex].origsizexp;
    framu.sizey := PNGlist[PNGindex].origframeheightp;
-   getmem(framu.image, jvar);
-   move((gfxlist[origsizeindex].bitmap + muah)^, framu.image^, jvar);
+   getmem(framu.image, j);
+   move((gfxlist[origsizeindex].bitmap + muah)^, framu.image^, j);
    mcg_ScaleBitmap(@framu, gfxlist[slotnum].sizexp, gfxlist[slotnum].frameheightp);
-   move(framu.image^, (gfxlist[slotnum].bitmap + argh)^, kvar);
+   move(framu.image^, (gfxlist[slotnum].bitmap + argh)^, k);
    freemem(framu.image); framu.image := NIL;
-   inc(muah, jvar);
-   inc(argh, kvar);
+   inc(muah, j);
+   inc(argh, k);
   end;
  end;
 
@@ -995,7 +995,7 @@ begin
   then begin
    // Actually it's a full-screen image, so it's going to get scaled to
    // a full viewport and its edges can generally be assumed to be fine
-   // without optimisation
+   // without optimisation.
    padleft := 0; padright := 0;
    padtop := 0; padbottom := 0;
   end else begin
@@ -1009,7 +1009,7 @@ begin
  end;
  {$endif}
 
- // Track memory usage
+ // Track memory usage.
  with gfxlist[slotnum] do begin
   interlockedexchangeadd(asman_gfxmemcount, sizexp * sizeyp shl 2);
   WriteBarrier;
@@ -1022,26 +1022,26 @@ end;
 
 procedure SortScripts(onlylast : boolean);
 // Sorts the script label array in place using teleporting gnome sort.
-var ivar, jvar : dword;
+var i, j : dword;
     tempscr : scripttype;
 begin
  if length(script) = 0 then exit;
- ivar := 0; jvar := $FFFFFFFF;
- if onlylast then ivar := length(script) - 1;
- while ivar < dword(length(script)) do begin
-  if (ivar = 0) or (script[ivar].labelnamu >= script[ivar - 1].labelnamu)
+ i := 0; j := $FFFFFFFF;
+ if onlylast then i := length(script) - 1;
+ while i < dword(length(script)) do begin
+  if (i = 0) or (script[i].labelnamu >= script[i - 1].labelnamu)
   then begin
-   if jvar = $FFFFFFFF then
-    inc(ivar)
+   if j = $FFFFFFFF then
+    inc(i)
    else begin
-    ivar := jvar; jvar := $FFFFFFFF;
+    i := j; j := $FFFFFFFF;
    end;
   end
   else begin
-   tempscr := script[ivar];
-   script[ivar] := script[ivar - 1];
-   script[ivar - 1] := tempscr;
-   jvar := ivar; dec(ivar);
+   tempscr := script[i];
+   script[i] := script[i - 1];
+   script[i - 1] := tempscr;
+   j := i; dec(i);
   end;
  end;
 end;
@@ -1049,24 +1049,24 @@ end;
 function GetLanguageIndex(const langdesc : UTF8string) : dword;
 // This returns an existing language index for the input descriptor; if the
 // language doesn't exist, it is added as a new language.
-var ivar : dword;
+var i : dword;
 begin
  // If no languages have been defined yet, make this the primary language.
  if languagelist[0] = 'undefined' then GetLanguageIndex := 0
  else begin
   // Does this language exist?
   GetLanguageIndex := $FFFFFFFF;
-  for ivar := 0 to length(languagelist) - 1 do
-   if lowercase(languagelist[ivar]) = lowercase(langdesc) then begin
+  for i := 0 to length(languagelist) - 1 do
+   if lowercase(languagelist[i]) = lowercase(langdesc) then begin
     // it exists!
-    GetLanguageIndex := ivar;
+    GetLanguageIndex := i;
     break;
    end;
   if GetLanguageIndex = $FFFFFFFF then begin
-   // it doesn't exist, so create a new language
+   // It doesn't exist, so create a new language.
    GetLanguageIndex := length(languagelist);
    setlength(languagelist, length(languagelist) + 1);
-   // set up this language in the global empty label for duplicable strings
+   // Set up this language in the global empty label for duplicable strings.
    setlength(script[0].stringlist, GetLanguageIndex + 1);
   end;
  end;
@@ -1083,7 +1083,7 @@ function ImportStringTable(const tablefile : UTF8string) : boolean;
 var outfile : file;
     tablebuf : pointer;
     tablesize : dword;
-    ivar : dword;
+    i : dword;
 
   procedure importbuffy;
   var readp, endp, cellstart : pointer;
@@ -1262,9 +1262,9 @@ begin
  ImportStringTable := FALSE;
  assign(outfile, tablefile);
  filemode := 0; reset(outfile, 1); // read-only access
- ivar := IOresult;
- if ivar <> 0 then begin
-  asman_errormsg := 'IO error ' + strdec(ivar) + ' trying to open ' + tablefile;
+ i := IOresult;
+ if i <> 0 then begin
+  asman_errormsg := 'IO error ' + strdec(i) + ' trying to open ' + tablefile;
   exit;
  end;
  // Read the presumed string table file into memory.
@@ -1276,15 +1276,15 @@ begin
  end;
  getmem(tablebuf, tablesize + 1);
  blockread(outfile, tablebuf^, tablesize);
- ivar := IOresult;
- // add an extra linebreak at the end to be sure
+ i := IOresult;
+ // Add an extra linebreak at the end to be sure.
  byte((tablebuf + tablesize)^) := $A;
  inc(tablesize);
- if ivar = 0 then begin
+ if i = 0 then begin
   importbuffy;
  end
- else asman_errormsg := 'IO error ' + strdec(ivar) + ' trying to read ' + tablefile;
- // Clean up
+ else asman_errormsg := 'IO error ' + strdec(i) + ' trying to read ' + tablefile;
+ // Clean up.
  freemem(tablebuf); tablebuf := NIL;
  close(outfile);
 end;
@@ -1296,7 +1296,7 @@ function DumpStringTable(const tablefile : UTF8string) : boolean;
 // they should be at all times.
 // Returns TRUE if successful, otherwise see asman_errormsg.
 var outfile : text;
-    ivar, jvar, kvar, lvar, mvar, stringindex : dword;
+    i, j, k, l, m, stringindex : dword;
 begin
  DumpStringTable := FALSE;
  if length(script) = 0 then begin
@@ -1305,51 +1305,51 @@ begin
  end;
 
  assign(outfile, tablefile);
- ivar := IOresult;
- if ivar <> 0 then begin
-  asman_errormsg := 'IO error ' + strdec(ivar) + ' trying to assign ' + tablefile;
+ i := IOresult;
+ if i <> 0 then begin
+  asman_errormsg := 'IO error ' + strdec(i) + ' trying to assign ' + tablefile;
   exit;
  end;
  filemode := 1; rewrite(outfile); // write-only access
- ivar := IOresult;
- if ivar <> 0 then begin
-  asman_errormsg := 'IO error ' + strdec(ivar) + ' trying to rewrite ' + tablefile;
+ i := IOresult;
+ if i <> 0 then begin
+  asman_errormsg := 'IO error ' + strdec(i) + ' trying to rewrite ' + tablefile;
   exit;
  end;
 
- // Print the header, with language descriptors
+ // Print the header, with language descriptors.
  write(outfile, 'String IDs');
- for ivar := 0 to length(languagelist) - 1 do
-  write(outfile, chr(9) + languagelist[ivar]);
+ for i := 0 to length(languagelist) - 1 do
+  write(outfile, chr(9) + languagelist[i]);
  writeln(outfile);
 
- // Loop through all labels
- for jvar := 0 to length(script) - 1 do begin
+ // Loop through all labels.
+ for j := 0 to length(script) - 1 do begin
   // Make sure each script has an array for all active languages.
-  if length(script[jvar].stringlist) < length(languagelist) then
-   setlength(script[jvar].stringlist, length(languagelist));
+  if length(script[j].stringlist) < length(languagelist) then
+   setlength(script[j].stringlist, length(languagelist));
   // Find the maximum amount of strings in this script.
-  kvar := 0;
-  for lvar := length(languagelist) - 1 downto 0 do
-   if dword(length(script[jvar].stringlist[lvar].txt)) > kvar then
-    kvar := length(script[jvar].stringlist[lvar].txt);
+  k := 0;
+  for l := length(languagelist) - 1 downto 0 do
+   if dword(length(script[j].stringlist[l].txt)) > k then
+    k := length(script[j].stringlist[l].txt);
   // Make sure all languages have the same amount of strings.
-  for lvar := length(languagelist) - 1 downto 0 do
-   if dword(length(script[jvar].stringlist[lvar].txt)) < kvar then
-    setlength(script[jvar].stringlist[lvar].txt, kvar);
+  for l := length(languagelist) - 1 downto 0 do
+   if dword(length(script[j].stringlist[l].txt)) < k then
+    setlength(script[j].stringlist[l].txt, k);
   // Loop through all strings indexes under this label.
-  if kvar <> 0 then
-   for stringindex := 0 to kvar - 1 do begin
+  if k <> 0 then
+   for stringindex := 0 to k - 1 do begin
     // Print the string ID.
-    write(outfile, script[jvar].labelnamu + '.' + strdec(stringindex));
+    write(outfile, script[j].labelnamu + '.' + strdec(stringindex));
     // Loop through all languages.
-    for lvar := 0 to length(languagelist) - 1 do
-    with script[jvar].stringlist[lvar] do begin
+    for l := 0 to length(languagelist) - 1 do
+    with script[j].stringlist[l] do begin
      // Print the string!
      write(outfile, chr(9));
      if length(txt[stringindex]) <> 0 then
-      for mvar := 1 to length(txt[stringindex]) do
-       write(outfile, txt[stringindex][mvar]);
+      for m := 1 to length(txt[stringindex]) do
+       write(outfile, txt[stringindex][m]);
     end;
     writeln(outfile);
    end;
@@ -1357,8 +1357,8 @@ begin
 
  DumpStringTable := TRUE;
 
- ivar := IOresult;
- if ivar <> 0 then asman_errormsg := 'IO error ' + strdec(ivar) + ' trying to write in ' + tablefile;
+ i := IOresult;
+ if i <> 0 then asman_errormsg := 'IO error ' + strdec(i) + ' trying to write in ' + tablefile;
  close(outfile);
 end;
 
@@ -1370,7 +1370,7 @@ function CompressScripts(poku : ppointer) : dword;
 // The caller must provide an empty pointer, where this function saves the
 // block. The caller is responsible for freeing it.
 var zzz : tzstream;
-    ivar : dword;
+    i : dword;
     unpackedsize : dword;
     zlibcode : longint;
 
@@ -1383,14 +1383,14 @@ begin
  CompressScripts := 0;
  // Calculate how much uncompressed data we have.
  unpackedsize := 12; // signature, block size, uncompressed block size
- ivar := length(script);
- while ivar <> 0 do begin
-  dec(ivar);
+ i := length(script);
+ while i <> 0 do begin
+  dec(i);
   inc(unpackedsize,
     6 + // two length bytes, code size dword
-    dword(length(script[ivar].labelnamu)) +
-    dword(length(script[ivar].nextlabel)) +
-    script[ivar].codesize);
+    dword(length(script[i].labelnamu)) +
+    dword(length(script[i].nextlabel)) +
+    script[i].codesize);
  end;
 
  // Reserve a bunch of memory for the compressed stream.
@@ -1413,37 +1413,37 @@ begin
  // Pack the scripts piece by piece.
  // (skip script[0] which is hardcoded as invalid and empty)
  if length(script) >= 2 then
-  for ivar := 1 to length(script) - 1 do
+  for i := 1 to length(script) - 1 do
    // Skip any script that has no code and no nextlabel.
-   if (script[ivar].nextlabel <> '') or (script[ivar].codesize <> 0)
+   if (script[i].nextlabel <> '') or (script[i].codesize <> 0)
    then begin
     // save the label name...
-    zzz.next_in := @script[ivar].labelnamu[0];
-    zzz.avail_in := length(script[ivar].labelnamu) + 1;
+    zzz.next_in := @script[i].labelnamu[0];
+    zzz.avail_in := length(script[i].labelnamu) + 1;
     zlibcode := deflate(zzz, Z_NO_FLUSH);
     if zlibcode <> Z_OK then begin zzzerror; exit; end;
     // save the next label name...
-    zzz.next_in := @script[ivar].nextlabel[0];
-    zzz.avail_in := length(script[ivar].nextlabel) + 1;
+    zzz.next_in := @script[i].nextlabel[0];
+    zzz.avail_in := length(script[i].nextlabel) + 1;
     zlibcode := deflate(zzz, Z_NO_FLUSH);
     if zlibcode <> Z_OK then begin zzzerror; exit; end;
     // save the code size...
-    zzz.next_in := @script[ivar].codesize;
+    zzz.next_in := @script[i].codesize;
     zzz.avail_in := 4;
     zlibcode := deflate(zzz, Z_NO_FLUSH);
     if zlibcode <> Z_OK then begin zzzerror; exit; end;
     // save the bytecode...
-    if script[ivar].codesize <> 0 then begin
-     zzz.next_in := script[ivar].code;
-     zzz.avail_in := script[ivar].codesize;
+    if script[i].codesize <> 0 then begin
+     zzz.next_in := script[i].code;
+     zzz.avail_in := script[i].codesize;
      zlibcode := deflate(zzz, Z_NO_FLUSH);
      if zlibcode <> Z_OK then begin zzzerror; exit; end;
     end;
    end;
 
  // Flush the output.
- ivar := 0;
- zzz.next_in := @ivar;
+ i := 0;
+ zzz.next_in := @i;
  zzz.avail_in := 1;
  zlibcode := deflate(zzz, Z_FINISH);
  if zlibcode <> Z_STREAM_END then begin zzzerror; exit; end;
@@ -1453,10 +1453,10 @@ begin
  if zlibcode <> Z_OK then begin zzzerror; exit; end;
 
  // Save and return the size of the compressed block.
- ivar := zzz.next_out - poku^;
- dword((poku^ + 4)^) := ivar - 8; // save, less sig and size dword itself
+ i := zzz.next_out - poku^;
+ dword((poku^ + 4)^) := i - 8; // save, less sig and size dword itself
  dword((poku^ + 8)^) := zzz.total_in; // save true unpacked size
- CompressScripts := ivar;
+ CompressScripts := i;
 end;
 
 function CompressStringTable(poku : ppointer; langindex : dword) : dword;
@@ -1468,7 +1468,7 @@ function CompressStringTable(poku : ppointer; langindex : dword) : dword;
 // The caller must provide an empty pointer, where this function saves the
 // block. The caller is responsible for freeing it.
 var zzz : tzstream;
-    ivar, jvar, lvar : dword;
+    i, j, l : dword;
     unpackedsize : dword;
     zlibcode : longint;
 
@@ -1488,31 +1488,33 @@ begin
 
  // Calculate how much uncompressed data we have, to estimate how large the
  // output buffer needs to be.
- unpackedsize := 12; // signature, block size, uncompressed stream size
+
+ // signature, block size, uncompressed stream size
+ unpackedsize := 12;
  // language description, terminator byte
  inc(unpackedsize, dword(length(languagelist[langindex])) + 2);
 
  if length(script) <> 0 then
-  for ivar := length(script) - 1 downto 0 do begin
-   if langindex < dword(length(script[ivar].stringlist)) then
-    with script[ivar] do begin
+  for i := length(script) - 1 downto 0 do begin
+   if langindex < dword(length(script[i].stringlist)) then
+    with script[i] do begin
      // stringcount dword + terminator word
      inc(unpackedsize, 6);
      // labelnamu ministring
      inc(unpackedsize, dword(length(labelnamu)) + 1);
      with stringlist[langindex] do
       if length(txt) <> 0 then
-       for jvar := length(txt) - 1 downto 0 do
+       for j := length(txt) - 1 downto 0 do
         // string index dword + length word + string itself
-        inc(unpackedsize, 6 + dword(length(txt[jvar])));
+        inc(unpackedsize, 6 + dword(length(txt[j])));
     end;
   end;
 
  // Reserve a bunch of memory for the compressed stream.
  // Compared to the uncompressed size, zdeflate.pas says the compressed
  // buffer must be at least 0.1% larger + 12 bytes.
- ivar := unpackedsize + unpackedsize shr 9 + 16;
- getmem(poku^, ivar);
+ i := unpackedsize + unpackedsize shr 9 + 16;
+ getmem(poku^, i);
 
  // Write the block header.
  dword(poku^^) := $511E0BB0; // signature
@@ -1526,68 +1528,68 @@ begin
  zzz.total_in := 0;
  zzz.total_out := 0;
  zzz.next_out := poku^ + 12; // skip sig, blocksize, streamsize
- zzz.avail_out := ivar - 12;
+ zzz.avail_out := i - 12;
 
  // Save the UTF-8 language descriptor ministring.
- ivar := length(languagelist[langindex]);
- if ivar > 255 then ivar := 255;
- zzz.next_in := @ivar;
+ i := length(languagelist[langindex]);
+ if i > 255 then i := 255;
+ zzz.next_in := @i;
  zzz.avail_in := 1;
  zlibcode := deflate(zzz, Z_NO_FLUSH);
  if zlibcode <> Z_OK then begin zzzerror; exit; end;
  zzz.next_in := @languagelist[langindex][1];
- zzz.avail_in := ivar;
+ zzz.avail_in := i;
  zlibcode := deflate(zzz, Z_NO_FLUSH);
  if zlibcode <> Z_OK then begin zzzerror; exit; end;
 
  // Pack the strings label by label...
  if length(script) <> 0 then
- for ivar := 0 to length(script) - 1 do begin
-  if langindex < dword(length(script[ivar].stringlist)) then begin
+ for i := 0 to length(script) - 1 do begin
+  if langindex < dword(length(script[i].stringlist)) then begin
    // save the label name as a ministring
-   zzz.next_in := @script[ivar].labelnamu[0];
-   zzz.avail_in := length(script[ivar].labelnamu) + 1;
+   zzz.next_in := @script[i].labelnamu[0];
+   zzz.avail_in := length(script[i].labelnamu) + 1;
    zlibcode := deflate(zzz, Z_NO_FLUSH);
    if zlibcode <> Z_OK then begin zzzerror; exit; end;
 
-   with script[ivar].stringlist[langindex] do begin
-    // save the string count (or more precisely, the array length required to
+   with script[i].stringlist[langindex] do begin
+    // Save the string count (or more precisely, the array length required to
     // store strings up to the highest index listed, since empty strings are
-    // not saved)
-    lvar := length(txt);
-    zzz.next_in := @lvar;
+    // not saved).
+    l := length(txt);
+    zzz.next_in := @l;
     zzz.avail_in := 4;
     zlibcode := deflate(zzz, Z_NO_FLUSH);
     if zlibcode <> Z_OK then begin zzzerror; exit; end;
 
-    // loop through the strings in this label...
+    // Loop through the strings in this label...
     if length(txt) <> 0 then
-     for jvar := 0 to length(txt) - 1 do
-      if length(txt[jvar]) <> 0 then begin
+     for j := 0 to length(txt) - 1 do
+      if length(txt[j]) <> 0 then begin
 
        // save the string length
-       lvar := length(txt[jvar]);
-       zzz.next_in := @lvar;
+       l := length(txt[j]);
+       zzz.next_in := @l;
        zzz.avail_in := 2;
        zlibcode := deflate(zzz, Z_NO_FLUSH);
        if zlibcode <> Z_OK then begin zzzerror; exit; end;
        // save the string index
-       zzz.next_in := @jvar;
+       zzz.next_in := @j;
        zzz.avail_in := 4;
        zlibcode := deflate(zzz, Z_NO_FLUSH);
        if zlibcode <> Z_OK then begin zzzerror; exit; end;
        // save the string
-       if lvar <> 0 then begin
-        zzz.next_in := @txt[jvar][1];
-        zzz.avail_in := lvar;
+       if l <> 0 then begin
+        zzz.next_in := @txt[j][1];
+        zzz.avail_in := l;
         zlibcode := deflate(zzz, Z_NO_FLUSH);
         if zlibcode <> Z_OK then begin zzzerror; exit; end;
        end;
       end;
 
     // save the terminator
-    lvar := $FFFFFFFF;
-    zzz.next_in := @lvar;
+    j := $FFFFFFFF;
+    zzz.next_in := @j;
     zzz.avail_in := 2;
     zlibcode := deflate(zzz, Z_NO_FLUSH);
     if zlibcode <> Z_OK then begin zzzerror; exit; end;
@@ -1595,22 +1597,22 @@ begin
   end;
  end;
 
- // Save the final terminator and flush the output
- ivar := 0;
- zzz.next_in := @ivar;
+ // Save the final terminator and flush the output.
+ i := 0;
+ zzz.next_in := @i;
  zzz.avail_in := 1;
  zlibcode := deflate(zzz, Z_FINISH);
  if zlibcode <> Z_STREAM_END then begin zzzerror; exit; end;
 
- // Calculate the final size of the block we generated
- ivar := zzz.next_out - poku^;
- // Save the string set chunk size, less the chunk signature/size itself
- dword((poku^ + 4)^) := ivar - 8;
- // Save the uncompressed stream size
+ // Calculate the final size of the block we generated.
+ i := zzz.next_out - poku^;
+ // Save the string set chunk size, less the chunk signature/size itself.
+ dword((poku^ + 4)^) := i - 8;
+ // Save the uncompressed stream size.
  dword((poku^ + 8)^) := zzz.total_in;
  writelog('String table saved: ' + strdec(ptruint(zzz.total_out)) + ' packed, ' + strdec(ptruint(zzz.total_in)) + ' unpacked');
- // Return the size of the compressed block
- CompressStringTable := ivar;
+ // Return the size of the compressed block.
+ CompressStringTable := i;
 
  // Shut down the compressor!
  zlibcode := DeflateEnd(zzz);
@@ -1628,7 +1630,7 @@ var tempbuffy, streamp, streamend : pointer;
     newlabelcount : dword;
     templabel : scripttype;
     zzz : tzstream;
-    ivar, jvar, unpackedsize : dword;
+    i, j, unpackedsize : dword;
     zlibcode : longint;
 
   procedure zzzerror;
@@ -1645,7 +1647,7 @@ begin
   exit;
  end;
 
- // Set up a buffer to decompress the scripts in
+ // Set up a buffer to decompress the scripts in.
  unpackedsize := dword(poku^);
  getmem(tempbuffy, unpackedsize);
  writelog('reading scripts block, packed ' + strdec(blocksize) + ', unpacked ' + strdec(unpackedsize));
@@ -1680,39 +1682,39 @@ begin
 
  while streamp < streamend do begin
   // Bounds check...
-  ivar := byte(streamp^);
-  if (ivar = 0) or (streamp + ivar + 1 >= streamend) then break;
-  // Get and uppercase the label name
+  i := byte(streamp^);
+  if (i = 0) or (streamp + i + 1 >= streamend) then break;
+  // Get and uppercase the label name.
   templabel.labelnamu := upcase(string(streamp^));
-  inc(streamp, ivar + 1);
+  inc(streamp, i + 1);
   // Bounds check...
-  ivar := byte(streamp^);
-  if streamp + ivar + 1 + 4 >= streamend then break;
-  // Get and uppercase the next label name
+  i := byte(streamp^);
+  if streamp + i + 1 + 4 >= streamend then break;
+  // Get and uppercase the next label name.
   templabel.nextlabel := upcase(string(streamp^));
-  inc(streamp, ivar + 1);
-  // Get the code size
+  inc(streamp, i + 1);
+  // Get the code size.
   templabel.codesize := dword(streamp^);
   inc(streamp, 4);
   // Bounds check...
-  if streamp + ivar > streamend then break;
-  // Get the bytecode
+  if streamp + i > streamend then break;
+  // Get the bytecode.
   getmem(templabel.code, templabel.codesize);
   move(streamp^, templabel.code^, templabel.codesize);
   inc(streamp, templabel.codesize);
-  // Set up a string array in templabel
+  // Set up a string array in templabel.
   setlength(templabel.stringlist, 0);
   setlength(templabel.stringlist, length(languagelist));
 
   // Does this label exist yet?
-  ivar := GetScr(templabel.labelnamu);
+  i := GetScr(templabel.labelnamu);
 
-  if ivar <> 0 then begin
-   // Label has been previously loaded! Overwrite the old one
-   if script[ivar].code <> NIL then begin
-    freemem(script[ivar].code); script[ivar].code := NIL;
+  if i <> 0 then begin
+   // Label has been previously loaded! Overwrite the old one.
+   if script[i].code <> NIL then begin
+    freemem(script[i].code); script[i].code := NIL;
    end;
-   script[ivar] := templabel;
+   script[i] := templabel;
   end else begin
    // Label has not been previously loaded! Append to the new labels list.
    // (The label may already be in the new label list if the dat file has
@@ -1724,23 +1726,23 @@ begin
    inc(newlabelcount);
   end;
 
-  // Clean up
+  // Clean up.
   templabel.code := NIL;
  end;
 
- // Append newlabellist[] to script[], and re-sort
+ // Append newlabellist[] to script[], and re-sort.
  if newlabelcount <> 0 then begin
-  ivar := length(script);
-  setlength(script, ivar + newlabelcount);
-  // Since there are dynamic arrays involved, can't just "move" the memory
-  for jvar := 0 to newlabelcount - 1 do
-   script[ivar + jvar] := newlabellist[jvar];
+  i := length(script);
+  setlength(script, i + newlabelcount);
+  // Since there are dynamic arrays involved, can't just "move" the memory.
+  for j := 0 to newlabelcount - 1 do
+   script[i + j] := newlabellist[j];
   setlength(newlabellist, 0);
   SortScripts(FALSE);
  end;
  writelog('acquired ' + strdec(newlabelcount) + ' new labels from script block');
 
- // clean up
+ // Clean up.
  if tempbuffy <> NIL then begin freemem(tempbuffy); tempbuffy := NIL; end;
  if templabel.code <> NIL then begin freemem(templabel.code); templabel.code := NIL; end;
  DecompressScripts := TRUE;
@@ -1762,7 +1764,7 @@ var tempbuffy, streamp, streamend : pointer;
     langdesc : UTF8string;
     targetlabel : pscripttype;
     labelnamu : string[63];
-    ivar, jvar, unpackedsize : dword;
+    i, j, unpackedsize : dword;
     zlibcode : longint;
 
   procedure zzzerror;
@@ -1778,7 +1780,7 @@ begin
   exit;
  end;
 
- // Set up a buffer to decompress the strings in
+ // Set up a buffer to decompress the strings in.
  unpackedsize := dword(poku^);
  getmem(tempbuffy, unpackedsize);
  writelog('reading string table block, packed ' + strdec(blocksize) + ', unpacked ' + strdec(unpackedsize));
@@ -1835,23 +1837,23 @@ begin
  newlabelcount := 0;
 
  while streamp < streamend do begin
-  // Read label name length byte
-  ivar := byte(streamp^);
+  // Read label name length byte.
+  i := byte(streamp^);
   // Bounds check...
-  if streamp + ivar + 5 > streamend then break;
-  // Acquire the label name
+  if streamp + i + 5 > streamend then break;
+  // Acquire the label name.
   labelnamu := string(streamp^);
-  inc(streamp, ivar + 1);
+  inc(streamp, i + 1);
 
   // Figure out where these strings can be placed.
   if labelnamu = '' then
    // global label!
    targetlabel := @script[0]
   else begin
-   ivar := GetScr(labelnamu);
-   if ivar <> 0 then
+   i := GetScr(labelnamu);
+   if i <> 0 then
     // pre-existing script label!
-    targetlabel := @script[ivar]
+    targetlabel := @script[i]
    else begin
     // new script label!
     if newlabelcount >= dword(length(newlabellist)) then setlength(newlabellist, length(newlabellist) + 256);
@@ -1869,37 +1871,37 @@ begin
   // Get the string count for this label. The label's string list must be
   // able to fit at least this many strings, although existing strings with
   // higher indexes must be left in place.
-  ivar := dword(streamp^);
+  i := dword(streamp^);
   inc(streamp, 4);
-  if ivar > dword(length(targetlabel^.stringlist[langindex].txt)) then
-   setlength(targetlabel^.stringlist[langindex].txt, ivar);
+  if i > dword(length(targetlabel^.stringlist[langindex].txt)) then
+   setlength(targetlabel^.stringlist[langindex].txt, i);
 
   // Loop through the string block...
   repeat
    // Bounds check...
    if streamp + 2 > streamend then break;
-   // Get the string length
-   jvar := word(streamp^);
+   // Get the string length.
+   j := word(streamp^);
    inc(streamp, 2);
-   // Check for the terminator
-   if jvar >= $FFFF then break;
+   // Check for the terminator.
+   if j >= $FFFF then break;
    // Bounds check...
-   if streamp + jvar + 4 > streamend then break;
-   // Get the string index
-   ivar := dword(streamp^);
+   if streamp + j + 4 > streamend then break;
+   // Get the string index.
+   i := dword(streamp^);
    inc(streamp, 4);
-   // Get the string
-   targetlabel^.stringlist[langindex].txt[ivar] := '';
-   setlength(targetlabel^.stringlist[langindex].txt[ivar], jvar);
-   move(streamp^, targetlabel^.stringlist[langindex].txt[ivar][1], jvar);
-   inc(streamp, jvar);
+   // Get the string.
+   targetlabel^.stringlist[langindex].txt[i] := '';
+   setlength(targetlabel^.stringlist[langindex].txt[i], j);
+   move(streamp^, targetlabel^.stringlist[langindex].txt[i][1], j);
+   inc(streamp, j);
    inc(numstrings);
   until FALSE;
 
   inc(numlabels);
  end;
 
- // clean up
+ // Clean up.
  if tempbuffy <> NIL then begin freemem(tempbuffy); tempbuffy := NIL; end;
  targetlabel := NIL;
  streamp := NIL; streamend := NIL;
@@ -1907,13 +1909,13 @@ begin
  writelog('language ' + strdec(langindex) + ': ' + languagelist[langindex]);
  writelog(strdec(numstrings) + ' strings were loaded in ' + strdec(numlabels) + ' labels.');
 
- // Append newlabellist[] to script[], and re-sort
+ // Append newlabellist[] to script[], and re-sort.
  if newlabelcount <> 0 then begin
-  ivar := length(script);
-  setlength(script, ivar + newlabelcount);
-  // Since there are dynamic arrays involved, can't just "move" the memory
-  for jvar := 0 to newlabelcount - 1 do
-   script[ivar + jvar] := newlabellist[jvar];
+  i := length(script);
+  setlength(script, i + newlabelcount);
+  // Since there are dynamic arrays involved, can't just "move" the memory.
+  for j := 0 to newlabelcount - 1 do
+   script[i + j] := newlabellist[j];
   setlength(newlabellist, 0);
   SortScripts(FALSE);
  end;
@@ -1934,6 +1936,7 @@ const typesize = sizeof(PNGtype.origresx) + sizeof(PNGtype.origresy)
     + sizeof(PNGtype.origofsxp) + sizeof(PNGtype.origofsyp)
     + sizeof(PNGtype.framecount) + sizeof(PNGtype.seqlen);
 begin
+ metaheader[0] := 0; // to silence a compiler warning
  blockend := filepos(filu) + blocksize; // end of this block
 
  // Read the image meta header into memory.
@@ -1994,22 +1997,22 @@ function ReadDATHeader(var dest : DATtype; var filu : file) : byte;
 // If successful, returns 0. The header content is placed in the given
 // DATtype record. The caller can continue reading the file contents using
 // the same file handle. The caller is responsible for closing the file.
-var ivar : dword;
+var i : dword;
 begin
  ReadDATHeader := 0;
  while IOresult <> 0 do ; // flush
 
- // Open the DAT file, prepare to start reading resources
+ // Open the DAT file, prepare to start reading resources.
  assign(filu, dest.filenamu);
  filemode := 0; reset(filu, 1); // read-only
- ivar := IOresult;
- if ivar <> 0 then begin
-  ReadDATHeader := byte(ivar);
-  asman_errormsg := errortxt(ivar);
+ i := IOresult;
+ if i <> 0 then begin
+  ReadDATHeader := byte(i);
+  asman_errormsg := errortxt(i);
   exit;
  end;
- blockread(filu, ivar, 4);
- if ivar <> $CACABAAB then begin // SuperSakura signature
+ blockread(filu, i, 4);
+ if i <> $CACABAAB then begin // SuperSakura signature
   close(filu);
   ReadDATHeader := 97;
   asman_errormsg := dest.filenamu + ' is missing SuperSakura DAT signature';
@@ -2018,12 +2021,12 @@ begin
 
  // ----- Reading Resources -----
  // HEADER (sig DWORD, header length DWORD, header data)
- ivar := 0;
- blockread(filu, ivar, 1);
- if ivar <> 3 then begin
+ i := 0;
+ blockread(filu, i, 1);
+ if i <> 3 then begin
   close(filu);
   ReadDATHeader := 96;
-  asman_errormsg := 'Incorrect DAT format version: ' + strdec(ivar);
+  asman_errormsg := 'Incorrect DAT format version: ' + strdec(i);
   exit;
  end;
 
@@ -2031,35 +2034,35 @@ begin
  blockread(filu, dest.bannerofs, 4);
 
  // Read the parent project name.
- blockread(filu, ivar, 1);
- setlength(dest.parentname, ivar);
- if ivar <> 0 then blockread(filu, dest.parentname[1], ivar);
+ blockread(filu, i, 1);
+ setlength(dest.parentname, i);
+ if i <> 0 then blockread(filu, dest.parentname[1], i);
  dest.parentname := lowercase(dest.parentname);
  // Extract the project name from the file name.
  dest.projectname := dest.filenamu;
  if lowercase(copy(dest.projectname, length(dest.projectname) - 3, 4)) = '.dat'
  then setlength(dest.projectname, length(dest.projectname) - 4);
- ivar := length(dest.projectname);
- while (ivar <> 0) and (dest.projectname[ivar] in ['/','\'] = FALSE) do dec(ivar);
- if ivar <> 0 then dest.projectname := copy(dest.projectname, ivar + 1, length(dest.projectname));
+ i := length(dest.projectname);
+ while (i <> 0) and (dest.projectname[i] in ['/','\'] = FALSE) do dec(i);
+ if i <> 0 then dest.projectname := copy(dest.projectname, i + 1, length(dest.projectname));
  dest.projectname := lowercase(dest.projectname);
  // If the project and parent are the same, no parent dependency.
  if dest.parentname = dest.projectname then dest.parentname := '';
 
  // Read the project description.
- blockread(filu, ivar, 1);
- setlength(dest.projectdesc, ivar);
- if ivar <> 0 then blockread(filu, dest.projectdesc[1], ivar);
+ blockread(filu, i, 1);
+ setlength(dest.projectdesc, i);
+ if i <> 0 then blockread(filu, dest.projectdesc[1], i);
 
  // Read the game version.
- blockread(filu, ivar, 1);
- setlength(dest.gameversion, ivar);
- if ivar <> 0 then blockread(filu, dest.gameversion[1], ivar);
+ blockread(filu, i, 1);
+ setlength(dest.gameversion, i);
+ if i <> 0 then blockread(filu, dest.gameversion[1], i);
 
- ivar := IOresult;
- if ivar <> 0 then begin
-  ReadDATHeader := byte(ivar);
-  asman_errormsg := errortxt(ivar);
+ i := IOresult;
+ if i <> 0 then begin
+  ReadDATHeader := byte(i);
+  asman_errormsg := errortxt(i);
  end;
 end;
 
@@ -2071,11 +2074,10 @@ function LoadDAT(const filunamu : UTF8string; const onlybanner : UTF8string) : b
 // returns an error number and asman_errormsg is filled.
 var filu : file;
     blockp : pointer;
-    datindex, blockID, blocksize, ivar, jvar : dword;
+    datindex, blockID, blocksize, i, j : dword;
     pnglistitems : dword;
     newPNGlist : array of PNGtype;
     PNGitem : PNGtype;
-    swaps : string;
     opresult, revivethread : boolean;
 begin
  LoadDAT := 0;
@@ -2098,7 +2100,7 @@ begin
  revivethread := asman_threadalive;
  asman_endthread;
 
- // We keep track of which dat files are loaded in this list: add new entry
+ // We keep track of which dat files are loaded in this list: add new entry.
  // (if this dat file was already loaded earlier, we erase it later on)
  datindex := length(datlist);
  setlength(datlist, datindex + 1);
@@ -2171,10 +2173,10 @@ begin
      // If only the banner is being loaded, rename the file.
      if onlybanner <> '' then PNGitem.namu := upcase(onlybanner);
      // Check if a PNG by this name is already listed.
-     ivar := GetPNG(PNGitem.namu);
-     if ivar <> 0 then
+     i := GetPNG(PNGitem.namu);
+     if i <> 0 then
       // PNG is already listed, overwrite it.
-      PNGlist[ivar] := PNGitem
+      PNGlist[i] := PNGitem
      else begin
       // Unlisted PNG, add to newPNGlist.
       if PNGlistitems >= dword(length(newPNGlist)) then setlength(newPNGlist, length(newPNGlist) + 100);
@@ -2205,55 +2207,55 @@ begin
      seek(filu, filepos(filu) + blocksize);
     end;
   end;
-  ivar := IOresult; if ivar <> 0 then break;
+  i := IOresult; if i <> 0 then break;
  end;
 
  close(filu);
  // Ignore and flush IO errors, we'll just go with whatever we got.
  while IOresult <> 0 do ;
 
- // Add new PNG images into PNGlist[]
+ // Add new PNG images into PNGlist[].
  // (Note that we don't check if the new PNGs exist in multiple copies in
  // this same DAT file; although technically possible, Recomp doesn't allow
  // it, but the DAT file may be hacked; if multiple copies exist, then they
  // all get loaded side by side into PNGlist, and exactly which PNG is
  // returned by GetPNG will depend on the length and content of PNGlist.)
  if PNGlistitems <> 0 then begin
-  ivar := dword(length(PNGlist)) + PNGlistitems;
-  setlength(PNGlist, ivar);
+  i := dword(length(PNGlist)) + PNGlistitems;
+  setlength(PNGlist, i);
 
   while PNGlistitems <> 0 do begin
    dec(PNGlistitems);
-   dec(ivar);
-   PNGlist[ivar] := newPNGlist[PNGlistitems];
-   setlength(PNGlist[ivar].sequence, PNGlist[ivar].seqlen);
-   PNGlist[ivar].sequence := newPNGlist[PNGlistitems].sequence;
+   dec(i);
+   PNGlist[i] := newPNGlist[PNGlistitems];
+   setlength(PNGlist[i].sequence, PNGlist[i].seqlen);
+   PNGlist[i].sequence := newPNGlist[PNGlistitems].sequence;
   end;
 
   setlength(newPNGlist, 0);
 
-  // Sort PNGlist[] - teleporting gnome
-  ivar := 0; jvar := $FFFFFFFF;
-  while ivar < dword(length(PNGlist)) do begin
-   if (ivar = 0) or (PNGlist[ivar].namu >= PNGlist[ivar - 1].namu)
+  // Sort PNGlist[] - teleporting gnome.
+  i := 0; j := $FFFFFFFF;
+  while i < dword(length(PNGlist)) do begin
+   if (i = 0) or (PNGlist[i].namu >= PNGlist[i - 1].namu)
    then begin
-    if jvar = $FFFFFFFF then inc(ivar) else begin ivar := jvar; jvar := $FFFFFFFF; end;
+    if j = $FFFFFFFF then inc(i) else begin i := j; j := $FFFFFFFF; end;
    end
    else begin
-    PNGitem := PNGlist[ivar];
-    PNGlist[ivar] := PNGlist[ivar - 1];
-    PNGlist[ivar - 1] := PNGitem;
-    jvar := ivar; dec(ivar);
+    PNGitem := PNGlist[i];
+    PNGlist[i] := PNGlist[i - 1];
+    PNGlist[i - 1] := PNGitem;
+    j := i; dec(i);
    end;
   end;
  end;
 
- // Set up the gfxlist[] to accommodate the loaded PNGs, at minimum 1 slot
- ivar := length(gfxlist);
- jvar := length(PNGlist) * 2 + 1;
- if jvar > ivar then begin
-  setlength(gfxlist, jvar);
-  fillbyte(gfxlist[ivar], (jvar - ivar) * sizeof(gfxtype), 0);
+ // Set up the gfxlist[] to accommodate the loaded PNGs, at minimum 1 slot.
+ i := length(gfxlist);
+ j := length(PNGlist) * 2 + 1;
+ if j > i then begin
+  setlength(gfxlist, j);
+  fillbyte(gfxlist[i], (j - i) * sizeof(gfxtype), 0);
  end;
 
  // Maintain the Dat list.
@@ -2265,14 +2267,14 @@ begin
   // If we loaded the entire dat, it's important to keep the dat in a list so
   // that a save state can require the same dat to be loaded. If the same dat
   // is being loaded multiple times, drop the earlier instance.
-  ivar := datindex;
-  while ivar <> 0 do begin
-   dec(ivar);
-   if datlist[ivar].filenamu = datlist[datindex].filenamu then begin
+  i := datindex;
+  while i <> 0 do begin
+   dec(i);
+   if datlist[i].filenamu = datlist[datindex].filenamu then begin
     // Found a match. Shift everything above this down by one.
-    while ivar < datindex do begin
-     datlist[ivar] := datlist[ivar + 1];
-     inc(ivar);
+    while i < datindex do begin
+     datlist[i] := datlist[i + 1];
+     inc(i);
     end;
     setlength(datlist, datindex);
     break;
@@ -2280,7 +2282,7 @@ begin
   end;
  end;
 
- // Now it's safe for the cacher thread to get up again
+ // Now it's safe for the cacher thread to get up again.
  if revivethread then asman_beginthread;
  if opresult = FALSE then LoadDAT := 99;
 end;
@@ -2294,35 +2296,35 @@ procedure UnloadDATs;
 // state has different DATs (eg. due to a mod change); afterward, load your
 // new list of DATs.
 // The caller MUST stop the cacher thread before calling this.
-var ivar, jvar : dword;
+var i, j : dword;
 begin
  writelog('Initing asset arrays to null');
  if length(script) <> 0 then
-  for ivar := dword(high(script)) downto 0 do begin
-   if script[ivar].code <> NIL then begin
-    freemem(script[ivar].code); script[ivar].code := NIL;
+  for i := dword(high(script)) downto 0 do begin
+   if script[i].code <> NIL then begin
+    freemem(script[i].code); script[i].code := NIL;
    end;
-   if length(script[ivar].stringlist) <> 0 then
-   for jvar := dword(high(script[ivar].stringlist)) downto 0 do
-    setlength(script[ivar].stringlist[jvar].txt, 0);
-   setlength(script[ivar].stringlist, 0);
+   if length(script[i].stringlist) <> 0 then
+   for j := dword(high(script[i].stringlist)) downto 0 do
+    setlength(script[i].stringlist[j].txt, 0);
+   setlength(script[i].stringlist, 0);
   end;
 
  if length(gfxlist) <> 0 then
-  for ivar := dword(high(gfxlist)) downto 0 do begin
-   if gfxlist[ivar].bitmap <> NIL then begin
-    freemem(gfxlist[ivar].bitmap);
-    gfxlist[ivar].bitmap := NIL;
+  for i := dword(high(gfxlist)) downto 0 do begin
+   if gfxlist[i].bitmap <> NIL then begin
+    freemem(gfxlist[i].bitmap);
+    gfxlist[i].bitmap := NIL;
    end;
   end;
  asman_gfxmemcount := 0;
  asman_queueitems := 0;
 
  if length(PNGlist) <> 0 then
-  for ivar := dword(high(PNGlist)) downto 0 do
-   setlength(PNGlist[ivar].sequence, 0);
+  for i := dword(high(PNGlist)) downto 0 do
+   setlength(PNGlist[i].sequence, 0);
 
- // Release the arrays entirely to discourage implicit resizing
+ // Release the arrays entirely to discourage implicit resizing.
  setlength(script, 0);
  setlength(gfxlist, 0);
  setlength(PNGlist, 0);
@@ -2345,10 +2347,10 @@ begin
 
  gfxlist[0].namu := chr(0);
 
- // Init the global empty label for duplicable strings
+ // Init the global empty label for duplicable strings.
  setlength(script[0].stringlist, 1);
 
- // Set up the base language
+ // Set up the base language.
  setlength(languagelist, 1);
  languagelist[0] := 'undefined';
 end;
@@ -2395,12 +2397,12 @@ var workslot : dword;
 begin
  asman_thread := turhuus - turhuus; // to eliminate compiler warnings
 
- // remain unobtrusive, humility is key to user satisfaction
+ // Remain unobtrusive, humility is key to user satisfaction.
  threadsetpriority(asman_ThreadID, -2); // lowest
  workslot := 1;
 
  repeat
-  // If there's nothing queued and we're not shutting down, enter a waitstate
+  // If there's nothing queued and not shutting down, enter a waitstate.
   while (asman_primeslot = 0) and (asman_queueitems = 0)
   and (asman_quitmsg = 0) do begin
    RTLEventWaitFor(asman_event);
@@ -2413,7 +2415,7 @@ begin
   //writelog('===asman_thread: queueitems=' + strdec(asman_queueitems) + ' quitmsg=' + strdec(asman_quitmsg));
   while (asman_primeslot <> 0) or (asman_queueitems <> 0) do begin
    if asman_quitmsg <> 0 then break;
-   // Check the prime slot for emergency work regularly
+   // Check the prime slot for emergency work regularly.
    if asman_primeslot <> 0 then begin
     if asman_primeslot >= dword(length(gfxlist)) then begin
      writelog('[!] asman_thread: primeslot out of bounds ' + strdec(asman_primeslot) + '/' + strdec(dword(length(gfxlist))));
@@ -2427,7 +2429,7 @@ begin
    // Next slot...
    inc(workslot);
    if workslot >= dword(length(gfxlist)) then workslot := 1;
-   // If we found something that needs to be cached, get it done
+   // If we found something that needs to be cached, get it done.
    if gfxlist[workslot].cachestate = asman_cachemark then DoSlot(workslot)
    // The other non-mark state, however, means the cache request in this slot
    // has become out of date and can be scrapped.
@@ -2440,20 +2442,23 @@ begin
   end;
  until asman_quitmsg <> 0;
  RTLEventSetEvent(asman_threadendevent);
- asman_threadID := 0; // clear own thread ID to signal clean exit
- EndThread(0); // return 0 for a successful exit
+
+ // Clear own thread ID to signal clean exit.
+ asman_threadID := 0;
+ // Return 0 for a successful exit.
+ EndThread(0);
 end;
 
 // ------------------------------------------------------------------
 
 initialization
 
- // Start logging
+ // Start logging.
  setlength(asman_log, 100);
  asman_logindex := 0;
  writelog('---===--- supersakura_asman ---===---');
 
- // Init variables
+ // Init variables.
  asman_ThreadID := 0; asman_threadalive := FALSE;
  asman_rescaler := @mcg_ScaleBitmap; // default scaler is the fastest
  asman_gfxmemlimit := 16777216; asman_gfxmemcount := 0;
