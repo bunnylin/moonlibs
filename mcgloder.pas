@@ -82,7 +82,7 @@ var mcg_errortxt : string; // in case of error, the caller can read this
     // 1 - Expand bitdepth to 8
     // 2 - Expand bitdepth and convert indexed to truecolor
 
-// This is a precalculated half cosine curve at 16-bit resolution.
+// The below is a precalculated half cosine curve at 16-bit resolution.
 // In radians, the input goes from cos(0) to cos(pi).
 // The output has been normalised from [1..-1] to [65535..0].
 // Notes:
@@ -195,9 +195,10 @@ type RGBtriplet = packed record
      end;
      RGBarray = array[0..$FFFFFF] of RGBtriplet;
 
+// (this is used by EPScale and BunnyScale...)
 const allowdiff = 4; // if < 2 then change var calc to a word
-var //sspat : array[0..$FF] of array[0..3] of byte;
-    CRCtable : array[0..255] of dword;
+
+var CRCtable : array[0..255] of dword;
     CRC : dword;
     CRCundone : boolean;
     pnghdr : packed record
@@ -229,8 +230,8 @@ end;
 
 // ------------------------------------------------------------------
 
-// Releases the memory used by a bitmap resource.
 procedure mcg_ForgetImage(which : pbitmaptype);
+// Releases the memory used by a bitmap resource.
 begin
  if which^.image <> NIL then begin
   freemem(which^.image); which^.image := NIL;
@@ -290,7 +291,7 @@ begin
 
  getmem(puhvi, whither^.sizex * whither^.sizey);
 
- // Inflate bitdepth row by row, assuming source rows are BYTE-aligned
+ // Inflate bitdepth row by row, assuming source rows are BYTE-aligned.
  jvar := whither^.sizey;
  lvar := 0; ofsu := 0;
  while jvar <> 0 do begin
@@ -318,14 +319,14 @@ var poku : pointer;
     bvar : byte;
 begin
  if whither^.memformat < 2 then exit; // already truecolor
- // Inflate bitdepth to 8 to start with
+ // Inflate bitdepth to 8 to start with.
  if whither^.bitdepth <> 8 then mcg_ExpandBitdepth(whither);
 
  getmem(poku, whither^.sizex * whither^.sizey * dword(3 + whither^.memformat and 1));
 
- // Convert indexed
+ // Convert indexed...
  if whither^.memformat = 4 then begin
-  // Indexed to 24-bit RGB
+  // indexed to 24-bit RGB
   ivar := whither^.sizex * whither^.sizey;
   while ivar <> 0 do begin
    dec(ivar);
@@ -339,16 +340,16 @@ begin
  end;
 
  if whither^.memformat = 5 then begin
-  // Indexed to 32-bit RGBA
+  // indexed to 32-bit RGBA
   for ivar := whither^.sizex * whither^.sizey - 1 downto 0 do
    dword((poku + ivar * 4)^) := dword(whither^.palette[byte((whither^.image + ivar)^)]);
   whither^.memformat := 1;
   freemem(whither^.image); whither^.image := poku; poku := NIL;
  end;
 
- // Convert monochrome
+ // Convert monochrome...
  if whither^.memformat = 2 then begin
-  // Monochrome to 24-bit RGB
+  // monochrome to 24-bit RGB
   ivar := whither^.sizex * whither^.sizey;
   while ivar <> 0 do begin
    dec(ivar);
@@ -357,9 +358,9 @@ begin
   whither^.memformat := 0;
  end;
  if whither^.memformat = 3 then begin
-  // Monochrome to 32-bit RGB
+  // monochrome to 32-bit RGB
   // this should not happen
-  mcg_ErrorTxt := 'Monochrome/alpha!? Contact the author or code a conversion routine.';
+  mcg_ErrorTxt := 'Monochrome/alpha!? Contact the author or write a conversion routine.';
  end;
 end;
 
@@ -463,14 +464,14 @@ begin
        mcg_errortxt := 'Openping: average filter called on first scanline.';
        freemem(tempbuf); tempbuf := NIL; exit;
       end;
-   // Up filter on first row is equivalent to direct copy
+   // Up filter on first row is equivalent to direct copy.
    2: byte(tempbuf^) := 0;
  end;
 
  // Still need to filter the image...
  getmem(whither^.image, whither^.sizex * whither^.sizey * dword(3 + whither^.memformat and 1));
 
- // calculate how many bytes of pixel data per row
+ // Calculate how many bytes of pixel data per row.
  bytesperrow := whither^.sizex * bytesperpixel;
  if whither^.bitdepth < 8 then bytesperrow := (bytesperrow * whither^.bitdepth + 7) div 8;
 
@@ -479,7 +480,7 @@ begin
 
  for y := whither^.sizey - 1 downto 0 do begin
 
-  // Each row starts with a filter byte
+  // Each row starts with a filter byte.
   rowfilter := byte(sofs^); inc(sofs);
   if rowfilter > 4 then begin
    mcg_errortxt := 'Openping: Illegal filter [' + strdec(rowfilter) + '] on image row ' + strdec(longint(whither^.sizey - 1 - y));
@@ -487,7 +488,7 @@ begin
    freemem(tempbuf); tempbuf := NIL; exit;
   end;
 
-  // Copy the row into the final image while applying a filter transform
+  // Copy the row into the final image while applying a filter transform.
   case rowfilter of
     // No change, direct copy
     0: begin
@@ -767,16 +768,16 @@ var sizu, destofs : dword;
     rmask, gmask, bmask : dword;
     redshift, greenshift, blueshift : byte; // for v4 bitmask shifting
     upsidedown : boolean;
-    // although a negative height should imply a top-down DIB, it seems that
-    // Windows cannot handle those at least on the clipboard
+    // Although a negative height should imply a top-down DIB, it seems that
+    // some Windowses cannot handle those, at least on the clipboard.
 begin
  mcg_BMPtoMemory := 1;
  // Make sure we are not overwriting a graphic; release the memory if we are.
  mcg_ForgetImage(membmp);
- // Skip the BITMAPFILEHEADER if one exists
+ // Skip the BITMAPFILEHEADER if one exists.
  if word(p^) = 19778 then // does it spell BM at the start?
   inc(p, 14);
- // Parse the BITMAPINFOHEADER (it could be a bitmapv4header too though)
+ // Parse the BITMAPINFOHEADER (it could be a bitmapv4header too though).
 
  redshift := 0; greenshift := 0; blueshift := 0;
  if bitmapv4header(p^).bv4v4Compression = BI_BITFIELDS then begin
@@ -812,7 +813,7 @@ begin
  // Bitdepths of 16-32 mean an RGB image without a palette.
  case membmp^.bitdepth of
    1: begin membmp^.memformat := 4; palsize := 2; end;
-   2: begin membmp^.memformat := 4; palsize := 4; end; // unsupported by specs
+   2: begin membmp^.memformat := 4; palsize := 4; end; // unsupported by spec
    4: begin membmp^.memformat := 4; palsize := 16; end;
    8: begin membmp^.memformat := 4; palsize := 256; end;
    // 16: meh; // if you ever come across one, I'll add support for it...
@@ -827,7 +828,7 @@ begin
  if bitmapv4header(p^).bv4ClrUsed > 0 then palsize := bitmapv4header(p^).bv4ClrUsed;
  if (membmp^.memformat = 4) and (palsize > 0) then setlength(membmp^.palette, palsize);
 
- // Read the palette into memory
+ // Read the palette into memory.
  // Per DIB specs, the alpha byte must be 0 both in the bitmap and palette
  // colors. Some programs put correct alpha data in anyway. With correct
  // alpha, 0 is fully transparent, so if the program reads all DIBs using the
@@ -841,7 +842,7 @@ begin
   for yloop := 0 to palsize - 1 do begin
    dword(membmp^.palette[yloop]) := dword(p^);
 
-   // Hack the alpha
+   // Hack the alpha.
    if RGBquad(p^).a <> $FF then membmp^.memformat := 5;
    if RGBquad(p^).a = 0 then inc(destofs);
    inc(p, 4);
@@ -887,7 +888,7 @@ begin
    if RGBAarray(membmp^.image^)[destofs].a <> 0 then sizu := sizu or 1;
    if RGBAarray(membmp^.image^)[destofs].a <> $FF then sizu := sizu or 2;
   end;
-  // if all alpha data is 0 (fully transparent), or all FF, scrap the channel
+  // If all alpha data is 0 (fully transparent), or all FF, scrap the channel
   // (not properly tested...)
   if (sizu and 1 = 0) or (sizu and 2 = 0) then begin
    for destofs := 0 to membmp^.sizex * membmp^.sizey - 1 do begin
@@ -951,7 +952,7 @@ var ivar, jvar, rowsize : dword;
     poku, tempbuf : pointer;
     z : tzstream;
 begin
- // Safety first
+ // Safety first.
  mcg_MemorytoPNG := 1;
  mcg_errortxt := '';
  if membmp^.memformat < 2 then
@@ -963,7 +964,7 @@ begin
  if (membmp^.sizex = 0) or (membmp^.sizey = 0) then mcg_errortxt := 'MemorytoPNG: image size 0!';
  if mcg_errortxt <> '' then exit;
 
- // Split the image into scanlines and theoretically filter it -> tempbuf^
+ // Split the image into scanlines and theoretically filter it -> tempbuf^.
  rowsize := 0;
  case membmp^.memformat of
    0: rowsize := membmp^.sizex * 3;
@@ -1007,7 +1008,7 @@ begin
    inc(iofs, rowsize); inc(dofs, rowsize);
   end;
 
- // Sic ZLib on the tempbuf^ image
+ // Sic ZLib on the tempbuf^ image.
  z.next_in := NIL;
  longint(ivar) := DeflateInit(z, Z_DEFAULT_COMPRESSION);
  if longint(ivar) <> Z_OK then begin
@@ -1041,12 +1042,12 @@ begin
   CRCundone := FALSE;
  end;
 
- // Reserve memory
+ // Reserve memory.
  ivar := dword(psizu^) + dword(length(membmp^.palette)) * 4 + 65536;
  pointer(p^) := NIL; getmem(pointer(p^), ivar);
  poku := pointer(p^);
 
- // PNG signature
+ // PNG signature.
  dword(poku^) := $474E5089; inc(poku, 4);
  dword(poku^) := $0A1A0A0D; inc(poku, 4);
 
@@ -1057,12 +1058,15 @@ begin
  dword(poku^) := swapendian(dword(membmp^.sizex)); inc(poku, 4); // width
  dword(poku^) := swapendian(dword(membmp^.sizey)); inc(poku, 4); // height
  byte(poku^) := membmp^.bitdepth; inc(poku); // header.bitdepth
+
  case membmp^.memformat of
    0: byte(poku^) := 2; // truecolor
    1: byte(poku^) := 6; // truecolor with alpha
    2: byte(poku^) := 0; // greyscale
    4,5: byte(poku^) := 3; // indexed-color
- end; inc(poku); // header.colortype
+ end;
+ inc(poku); // header.colortype
+
  byte(poku^) := 0; inc(poku); // header.compressionmethod
  byte(poku^) := 0; inc(poku); // header.filtermethod
  byte(poku^) := 0; inc(poku); // header.interlacemethod
@@ -1132,7 +1136,7 @@ begin
  dword(poku^) := $444E4549; inc(poku, 4); // end signature
  dword(poku^) := $826042AE; inc(poku, 4); // end CRC
 
- // Calculate the final size, and we're done
+ // Calculate the final size, and we're done.
  dword(psizu^) := poku - pointer(p^);
  poku := NIL;
 
@@ -1164,6 +1168,7 @@ var processor : pointer;
     grid, nextline, source, target, optimus : dword;
     gridbyte, kalk : byte;
     calc : byte; // change to word if allowdiff < 2
+    sspat : array[0..$FF] of array[0..3] of byte;
 begin
  if (poku^.image = NIL) or (poku^.memformat <> 1)
  then exit;
@@ -1385,6 +1390,7 @@ var processor : pointer;
     grid, nextline, source, target, optimus : dword;
     gridbyte, kalk : byte;
     calc : byte; // change to word if allowdiff < 2
+    sspat : array[0..$FF] of array[0..3] of byte;
 begin
  if (poku^.image = NIL) or (poku^.memformat <> 0)
  then exit;
@@ -1907,7 +1913,7 @@ begin
   a := tox * 3;
   b := poku^.sizex * 3;
   g := poku^.sizey * a;
-  // Horizontal stretch
+  // Horizontal stretch...
   getmem(workbuf, g);
   destp := workbuf;
   span := (poku^.sizex shl 15) div tox;
@@ -1945,7 +1951,7 @@ begin
  end else
 
  if tox < poku^.sizex then begin
-  // Horizontal shrink
+  // Horizontal shrink...
   getmem(workbuf, tox * poku^.sizey * 3);
   destp := workbuf;
   span := (poku^.sizex shl 15) div tox;
@@ -1993,7 +1999,7 @@ begin
  start := 0;
  b := poku^.sizex * 3;
  if toy > poku^.sizey then begin
-  // Vertical stretch
+  // Vertical stretch...
   getmem(workbuf, b * toy);
   destp := workbuf;
   span := (poku^.sizey shl 15) div toy;
@@ -2023,7 +2029,7 @@ begin
  end else
 
  if toy < poku^.sizey then begin
-  // Vertical shrink
+  // Vertical shrink...
   getmem(workbuf, b * toy);
   destp := workbuf;
   span := (poku^.sizey shl 15) div toy;
@@ -2079,7 +2085,7 @@ begin
   a := tox * 4;
   b := poku^.sizex * 4;
   g := poku^.sizey * a;
-  // Horizontal stretch
+  // Horizontal stretch...
   getmem(workbuf, g);
   destp := workbuf;
   span := (poku^.sizex shl 15) div tox;
@@ -2117,7 +2123,7 @@ begin
  end else
 
  if tox < poku^.sizex then begin
-  // Horizontal shrink
+  // Horizontal shrink...
   getmem(workbuf, tox * poku^.sizey * 4);
   destp := workbuf;
   span := (poku^.sizex shl 15) div tox;
@@ -2169,7 +2175,7 @@ begin
  start := 0;
  b := poku^.sizex * 4;
  if toy > poku^.sizey then begin
-  // Vertical stretch
+  // Vertical stretch...
   getmem(workbuf, b * toy);
   destp := workbuf;
   span := (poku^.sizey shl 15) div toy;
@@ -2199,7 +2205,7 @@ begin
  end else
 
  if toy < poku^.sizey then begin
-  // Vertical shrink
+  // Vertical shrink...
   getmem(workbuf, b * toy);
   destp := workbuf;
   span := (poku^.sizey shl 15) div toy;
