@@ -13,9 +13,6 @@ unit mccommon;
 
 interface
 
-type pstring = ^string;
-     ppointer = ^pointer;
-
 const hextable : array[0..$F] of char = (
 '0','1','2','3','4','5','6','7','8','9','A','B','C','D','E','F');
 
@@ -46,7 +43,7 @@ begin
 end;
 
 function strdec(luku : ptruint) : string;
-// Takes a value and returns it in plain numbers in an ascii string
+// Takes a value and returns it in plain numbers in an ascii string.
 begin
  strdec := '';
  repeat
@@ -68,13 +65,15 @@ begin
 end;
 
 function valx(const luku : string) : ptrint;
-// Takes a string and returns any possible value it encounters at the start
+// Takes a string and returns any possible value it encounters at the start.
 var tempvar : byte;
     nega : boolean;
 begin
  valx := 0; tempvar := 1; nega := FALSE;
  if luku = '' then exit;
- while (tempvar <= length(luku)) and (ord(luku[tempvar]) in [45, 48..57] = FALSE) do inc(tempvar);
+ while (tempvar <= length(luku))
+ and (ord(luku[tempvar]) in [45, 48..57] = FALSE)
+  do inc(tempvar);
  if tempvar > length(luku) then exit;
 
  if luku[tempvar] = '-' then begin
@@ -99,10 +98,10 @@ begin
 
  repeat
   case ord(luku[tempvar]) of
-   48..57: valhex := (valhex shl 4) or byte(ord(luku[tempvar]) and $F);
-   65..70: valhex := (valhex shl 4) or byte(ord(luku[tempvar]) - 55);
-   97..102: valhex := (valhex shl 4) or byte(ord(luku[tempvar]) - 87);
-   else exit;
+    48..57: valhex := (valhex shl 4) or byte(ord(luku[tempvar]) and $F);
+    65..70: valhex := (valhex shl 4) or byte(ord(luku[tempvar]) - 55);
+    97..102: valhex := (valhex shl 4) or byte(ord(luku[tempvar]) - 87);
+    else exit;
   end;
   inc(tempvar);
   if tempvar > length(luku) then begin exit; end;
@@ -171,10 +170,10 @@ var ivar, str2len : dword;
 begin
  MatchString := FALSE;
  str2len := length(str2);
- // are there even enough characters to compare?
+ // Are there even enough characters to compare?
  if (str2len = 0) or (dword(length(str1)) + 1 < ofs + str2len) then exit;
 
- // first do dword compares
+ // First do dword compares.
  str1ofs := @str1[ofs];
  str2ofs := @str2[1];
  ivar := str2len shr 2;
@@ -185,7 +184,7 @@ begin
   dec(ivar);
  end;
 
- // finally do byte compares
+ // Finally do byte compares.
  ivar := str2len and 3;
  while ivar <> 0 do begin
   if byte(str1ofs^) <> byte(str2ofs^) then exit;
@@ -194,7 +193,7 @@ begin
   dec(ivar);
  end;
 
- // made it all the way, found a match!
+ // Made it all the way, found a match!
  inc(ofs, str2len);
  MatchString := TRUE;
 end;
@@ -212,29 +211,29 @@ begin
  while buflen <> 0 do begin
   dec(buflen);
 
-  // Start of row: print offset
+  // Start of row: print offset.
   if bufofs and $F = 0 then begin
    strutsi := strhex(bufofs);
    write(space(6 - length(strutsi)) + strutsi + ':  ');
    ascii := '';
   end;
 
-  // Middle: print bytes, with vertical divider after every fourth
+  // Middle: print bytes, with vertical divider after every fourth.
   inc(bufofs);
   if bufofs and 3 = 0 then write(strhex(byte(buffy^)) + '  ')
   else write(strhex(byte(buffy^)) + ' ');
   inc(byte(ascii[0]));
-  // construct the ascii representation while at it
+  // Construct the ascii representation while at it.
   if byte(buffy^) in [0..31, 255]
   then ascii[byte(ascii[0])] := '.'
   else ascii[byte(ascii[0])] := char(buffy^);
 
-  // End of row: print ascii representation
+  // End of row: print ascii representation.
   if bufofs and $F = 0 then writeln(ascii);
 
   inc(buffy);
  end;
- // End of data: print ascii representation
+ // End of data: print ascii representation.
  if bufofs and $F <> 0 then
   writeln(space(
   (16 - (bufofs and $F)) * 3 // skip rest of middle bytes on this row
@@ -264,26 +263,25 @@ end;
 function errortxt(const ernum : byte) : string;
 begin
  case ernum of
-  // FPC errors
-  2: errortxt := 'File not found';
-  3: errortxt := 'Path not found';
-  5: errortxt := 'Access denied';
-  6: errortxt := 'File handle trashed, memory corrupted!';
-  100: errortxt := 'Disk read error';
-  101: errortxt := 'Disk write error or printed incomplete UTF8';
-  103: errortxt := 'File not open';
-  200: errortxt := 'Div by zero!!';
-  201: errortxt := 'Range check error';
-  202: errortxt := 'Stack overflow';
-  203: errortxt := 'Heap overflow, out of mem';
-  204: errortxt := 'Invalid pointer operation';
-  205: errortxt := 'FP overflow';
-  206: errortxt := 'FP underflow';
-  207: errortxt := 'Invalid FP op';
-  215: errortxt := 'Arithmetic overflow';
-  216: errortxt := 'General protection fault';
-  217: errortxt := 'Unhandled exception';
-  else errortxt := 'Unlisted error';
+   2: errortxt := 'File not found';
+   3: errortxt := 'Path not found';
+   5: errortxt := 'Access denied';
+   6: errortxt := 'File handle trashed, memory corrupted!';
+   100: errortxt := 'Disk read error';
+   101: errortxt := 'Disk write error or printed incomplete UTF8';
+   103: errortxt := 'File not open';
+   200: errortxt := 'Div by zero!!';
+   201: errortxt := 'Range check error';
+   202: errortxt := 'Stack overflow';
+   203: errortxt := 'Heap overflow, out of mem';
+   204: errortxt := 'Invalid pointer operation';
+   205: errortxt := 'FP overflow';
+   206: errortxt := 'FP underflow';
+   207: errortxt := 'Invalid FP op';
+   215: errortxt := 'Arithmetic overflow';
+   216: errortxt := 'General protection fault';
+   217: errortxt := 'Unhandled exception';
+   else errortxt := 'Unlisted error';
  end;
  errortxt := strdec(ernum) + ': ' + errortxt;
 end;
