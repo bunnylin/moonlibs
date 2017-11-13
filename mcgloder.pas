@@ -280,34 +280,42 @@ end;
 
 procedure mcg_ExpandBitdepth(whither : pbitmaptype);
 // Transforms indexed bitmaps of less than 8 bits per pixel to 8 bpp.
-var ivar, jvar, lvar, ofsu : dword;
-    puhvi : pointer;
-    bvar : byte;
+var p, psrc, pdest : pointer;
+    x, y : dword;
+    bitindex, bitmask : byte;
 begin
  if whither^.bitdepth = 8 then exit; // already at 8 bpp
  if whither^.bitdepth in [1,2,4] = FALSE then begin
   mcg_ErrorTxt := 'Unsupported bitdepth: ' + strdec(whither^.bitdepth); exit;
  end;
+ bitmask := (1 shl whither^.bitdepth) - 1;
 
- getmem(puhvi, whither^.sizex * whither^.sizey);
+ getmem(p, whither^.sizex * whither^.sizey);
 
  // Inflate bitdepth row by row, assuming source rows are BYTE-aligned.
- jvar := whither^.sizey;
- lvar := 0; ofsu := 0;
- while jvar <> 0 do begin
-  ivar := whither^.sizex;
-  bvar := 8;
-  while ivar <> 0 do begin
-   dec(bvar, whither^.bitdepth);
-   byte((puhvi + ofsu)^) := (byte((whither^.image + lvar)^) shr bvar) and ((1 shl whither^.bitdepth) - 1);
-   if bvar = 0 then begin inc(lvar); bvar := 8; end;
-   inc(ofsu); dec(ivar);
+ y := whither^.sizey;
+ psrc := whither^.image;
+ pdest := p;
+
+ while y <> 0 do begin
+  x := whither^.sizex;
+  bitindex := 8;
+  while x <> 0 do begin
+   dec(bitindex, whither^.bitdepth);
+   byte(pdest^) := (byte(psrc^) shr bitindex) and bitmask;
+   if bitindex = 0 then begin
+    inc(psrc);
+    bitindex := 8;
+   end;
+   inc(pdest);
+   dec(x);
   end;
-  if bvar <> 8 then inc(lvar); // force byte-align after end of row
-  dec(jvar);
+  if bitindex <> 8 then inc(psrc); // force byte-align after end of row
+  dec(y);
  end;
 
- freemem(whither^.image); whither^.image := puhvi; puhvi := NIL;
+ freemem(whither^.image); whither^.image := p; p := NIL;
+ psrc := NIL; pdest := NIL;
  whither^.bitdepth := 8;
 end;
 
@@ -315,7 +323,7 @@ procedure mcg_ExpandIndexed(whither : pbitmaptype);
 // Transforms an indexed bitmap into usable 24-bit RGB or 32-bit RGBA.
 // (An inverse transition usually requires color compression, try BunComp)
 var poku : pointer;
-    ivar : dword;
+    i : dword;
     bvar : byte;
 begin
  if whither^.memformat < 2 then exit; // already truecolor
@@ -327,13 +335,13 @@ begin
  // Convert indexed...
  if whither^.memformat = 4 then begin
   // indexed to 24-bit RGB
-  ivar := whither^.sizex * whither^.sizey;
-  while ivar <> 0 do begin
-   dec(ivar);
-   bvar := byte((whither^.image + ivar)^);
-   RGBarray(poku^)[ivar].r := whither^.palette[bvar].r;
-   RGBarray(poku^)[ivar].g := whither^.palette[bvar].g;
-   RGBarray(poku^)[ivar].b := whither^.palette[bvar].b;
+  i := whither^.sizex * whither^.sizey;
+  while i <> 0 do begin
+   dec(i);
+   bvar := byte((whither^.image + i)^);
+   RGBarray(poku^)[i].r := whither^.palette[bvar].r;
+   RGBarray(poku^)[i].g := whither^.palette[bvar].g;
+   RGBarray(poku^)[i].b := whither^.palette[bvar].b;
   end;
   whither^.memformat := 0;
   freemem(whither^.image); whither^.image := poku; poku := NIL;
@@ -341,8 +349,8 @@ begin
 
  if whither^.memformat = 5 then begin
   // indexed to 32-bit RGBA
-  for ivar := whither^.sizex * whither^.sizey - 1 downto 0 do
-   dword((poku + ivar * 4)^) := dword(whither^.palette[byte((whither^.image + ivar)^)]);
+  for i := whither^.sizex * whither^.sizey - 1 downto 0 do
+   dword((poku + i * 4)^) := dword(whither^.palette[byte((whither^.image + i)^)]);
   whither^.memformat := 1;
   freemem(whither^.image); whither^.image := poku; poku := NIL;
  end;
@@ -350,10 +358,10 @@ begin
  // Convert monochrome...
  if whither^.memformat = 2 then begin
   // monochrome to 24-bit RGB
-  ivar := whither^.sizex * whither^.sizey;
-  while ivar <> 0 do begin
-   dec(ivar);
-   fillbyte((whither^.image + ivar * 3)^, 3, byte((whither^.image + ivar)^));
+  i := whither^.sizex * whither^.sizey;
+  while i <> 0 do begin
+   dec(i);
+   fillbyte((whither^.image + i * 3)^, 3, byte((whither^.image + i)^));
   end;
   whither^.memformat := 0;
  end;
@@ -391,8 +399,8 @@ function Openping(whence : pointer; whither : pbitmaptype) : byte;
 // The output format is 24-bit RGB, or 32-bit RGBA if the image has alpha.
 // Bitdepths 1, 2, 4 and 8 per sample are supported; interlacing is not.
 // OpenPing returns 0 if all OK; otherwise mcg_errortxt is filled.
-var ivar, jvar, kvar, x, y : dword;
-    lvar : longint;
+var i, j, k, x, y : dword;
+    l : longint;
     bytesperrow, bytesperpixel : dword;
     tempbuf, sofs, dofs : pointer;
     z : tzstream;
@@ -435,23 +443,23 @@ begin
 
  // Decompress the image stream into tempbuf^.
  z.next_in := NIL;
- ivar := inflateInit(z);
- if ivar <> z_OK then begin
+ i := inflateInit(z);
+ if i <> z_OK then begin
   mcg_errortxt := 'Openping: Error while calling inflateInit.'; exit;
  end;
 
- ivar := whither^.sizex * whither^.sizey * 4 + whither^.sizey;
- getmem(tempbuf, ivar);
+ i := whither^.sizex * whither^.sizey * 4 + whither^.sizey;
+ getmem(tempbuf, i);
  z.next_in := whence;
  z.avail_in := pnghdr.streamlength;
  z.total_in := 0;
  z.next_out := tempbuf;
- z.avail_out := ivar;
+ z.avail_out := i;
  z.total_out := 0;
- ivar := inflate(z, Z_FINISH);
+ i := inflate(z, Z_FINISH);
  inflateEnd(z);
- if (ivar <> Z_STREAM_END) and (ivar <> Z_OK) then begin
-  mcg_errortxt := 'Openping: Error ' + xlatezerror(ivar) + ' while inflating PNG image!';
+ if (i <> Z_STREAM_END) and (i <> Z_OK) then begin
+  mcg_errortxt := 'Openping: Error ' + xlatezerror(i) + ' while inflating PNG image!';
   freemem(tempbuf); tempbuf := NIL; exit;
  end;
 
@@ -546,10 +554,10 @@ begin
         x := bytesperpixel;
         while x > 0 do begin
          dec(x);
-         jvar := byte((dofs - bytesperrow)^); // b
-         if jvar = 0
+         j := byte((dofs - bytesperrow)^); // b
+         if j = 0
          then byte(dofs^) := byte(sofs^) // add 0
-         else byte(dofs^) := byte(byte(sofs^) + jvar); // add b
+         else byte(dofs^) := byte(byte(sofs^) + j); // add b
 
          inc(sofs); inc(dofs);
         end;
@@ -558,19 +566,19 @@ begin
         x := bytesperrow - bytesperpixel;
         while x > 0 do begin
          dec(x);
-         ivar := byte((dofs - bytesperpixel)^); // a
-         jvar := byte((dofs - bytesperrow)^); // b
-         kvar := byte((dofs - bytesperrow - bytesperpixel)^); // c
+         i := byte((dofs - bytesperpixel)^); // a
+         j := byte((dofs - bytesperrow)^); // b
+         k := byte((dofs - bytesperrow - bytesperpixel)^); // c
          // (the below longint cast avoids arithmetic overflow on linux64...)
-         lvar := longint(ivar + jvar) - kvar; // p = a + b - c
-         ivar := abs(lvar - ivar); // pa = abs(p - a)
-         jvar := abs(lvar - jvar); // pb = abs(p - b)
-         kvar := abs(lvar - kvar); // pc = abs(p - c)
+         l := longint(i + j) - k; // p = a + b - c
+         i := abs(l - i); // pa = abs(p - a)
+         j := abs(l - j); // pb = abs(p - b)
+         k := abs(l - k); // pc = abs(p - c)
 
-         if (ivar <= jvar) and (ivar <= kvar)
+         if (i <= j) and (i <= k)
          // add a
          then byte(dofs^) := byte(byte(sofs^) + byte((dofs - bytesperpixel)^))
-         else if jvar <= kvar
+         else if j <= k
          // add b
          then byte(dofs^) := byte(byte(sofs^) + byte((dofs - bytesperrow)^))
          else byte(dofs^) := byte(byte(sofs^) + byte((dofs - bytesperrow - bytesperpixel)^));
@@ -593,9 +601,9 @@ begin
   sofs := whither^.image;
   dofs := sofs + bytesperrow * whither^.sizey;
   while sofs < dofs do begin
-   ivar := byte(sofs^);
+   i := byte(sofs^);
    byte(sofs^) := byte((sofs + 2)^);
-   byte((sofs + 2)^) := ivar;
+   byte((sofs + 2)^) := i;
    inc(sofs, bytesperpixel);
   end;
  end;
@@ -624,23 +632,23 @@ function mcg_PNGtoMemory(readp : pointer; psize : dword; membmp : pbitmaptype) :
 // The memory in p^ is not released by this function.
 // If mcg_ReadHeaderOnly is non-zero, reads everything except the bitmap.
 // PNGtoMemory returns 0 if all OK; otherwise mcg_errortxt is filled.
-var chunklen, chunktype, konkeli : dword;
-    pend, whence : pointer;
+var chunklen, chunktype, i : dword;
+    endp, idatbuffy : pointer;
     headerfound : boolean;
 begin
  mcg_PNGtoMemory := 1;
- headerfound := FALSE; whence := NIL;
+ headerfound := FALSE; idatbuffy := NIL;
  // Make sure we are not overwriting a graphic; release the memory if we are.
  mcg_ForgetImage(membmp);
 
- pend := readp + psize;
+ endp := readp + psize;
  repeat
   // Parse the PNG chunks (also recognise PNG signature if encountered).
   // Every chunk has a length dword, an ID dword, a variable length of data,
   // and a CRC dword. (We ignore the CRC.)
 
   // safety
-  if readp + 8 >= pend then break;
+  if readp + 8 >= endp then break;
   // chunk data length
   chunklen := swapendian(dword(readp^));
   inc(readp, 4);
@@ -652,7 +660,7 @@ begin
   if (chunktype = $0A1A0A0D) and (chunklen = $89504E47) then continue;
 
   // More safety...
-  if readp + chunklen >= pend then break;
+  if readp + chunklen >= endp then break;
 
   case chunktype of
     // IHDR
@@ -671,14 +679,14 @@ begin
     // PLTE
     $45544C50:
     begin
-     konkeli := chunklen div 3;
-     setlength(membmp^.palette, konkeli);
-     while konkeli <> 0 do begin
-      dec(konkeli);
-      membmp^.palette[konkeli].r := byte((readp + konkeli * 3)^);
-      membmp^.palette[konkeli].g := byte((readp + konkeli * 3 + 1)^);
-      membmp^.palette[konkeli].b := byte((readp + konkeli * 3 + 2)^);
-      membmp^.palette[konkeli].a := $FF;
+     i := chunklen div 3;
+     setlength(membmp^.palette, i);
+     while i <> 0 do begin
+      dec(i);
+      membmp^.palette[i].r := byte((readp + i * 3)^);
+      membmp^.palette[i].g := byte((readp + i * 3 + 1)^);
+      membmp^.palette[i].b := byte((readp + i * 3 + 2)^);
+      membmp^.palette[i].a := $FF;
      end;
     end;
     // IDAT
@@ -686,20 +694,20 @@ begin
     begin
      if mcg_ReadHeaderOnly = 0 then begin
       if pnghdr.streamlength = 0
-      then getmem(whence, chunklen)
-      else reallocmem(whence, pnghdr.streamlength + chunklen);
-      move(readp^, (whence + pnghdr.streamlength)^, chunklen);
+      then getmem(idatbuffy, chunklen)
+      else reallocmem(idatbuffy, pnghdr.streamlength + chunklen);
+      move(readp^, (idatbuffy + pnghdr.streamlength)^, chunklen);
      end;
      inc(pnghdr.streamlength, chunklen);
     end;
     // tRNS
     $534E5274:
     if pnghdr.colortype = 3 then begin
-     konkeli := chunklen;
-     if konkeli > dword(length(membmp^.palette)) then konkeli := length(membmp^.palette);
-     while konkeli <> 0 do begin
-      dec(konkeli);
-      membmp^.palette[konkeli].a := byte((readp + konkeli)^);
+     i := chunklen;
+     if i > dword(length(membmp^.palette)) then i := length(membmp^.palette);
+     while i <> 0 do begin
+      dec(i);
+      membmp^.palette[i].a := byte((readp + i)^);
      end;
      pnghdr.colortype := 55; // internal: indexed with valid alpha
     end;
@@ -711,7 +719,7 @@ begin
   inc(readp, chunklen + 4);
 
  // Break if the input buffy ran out.
- until (readp >= pend);
+ until (readp >= endp);
 
  // Was a PNG IHDR encountered?
  if headerfound = FALSE then begin
@@ -729,8 +737,8 @@ begin
  end;
 
  // Finally, decompress the image into a bitmap!
- mcg_PNGtoMemory := openping(whence, membmp);
- freemem(whence); whence := NIL;
+ mcg_PNGtoMemory := openping(idatbuffy, membmp);
+ freemem(idatbuffy); idatbuffy := NIL;
 end;
 
 function mcg_BMPtoMemory(p : pointer; membmp : pbitmaptype) : byte;
@@ -947,11 +955,12 @@ function mcg_MemorytoPNG(membmp : pbitmaptype; p, psizu : pointer) : byte;
 // PSizu must point to a usable DWORD-sized memory area! The function places
 // the size in bytes of the resulting datastream into DWORD(PSizu^).
 // The function return 0 if all goes well, otherwise mcg_errortxt is filled.
-var ivar, jvar, rowsize : dword;
+var i, j, rowsize : dword;
     iofs, dofs : dword;
     poku, tempbuf : pointer;
     z : tzstream;
 begin
+ {$note Todo: use direct p^ instead of iofs/dofs}
  // Safety first.
  mcg_MemorytoPNG := 1;
  mcg_errortxt := '';
@@ -978,9 +987,9 @@ begin
  iofs := 0; dofs := 0;
  if membmp^.memformat = 0 then begin
   // 24-bit RGB
-  for ivar := membmp^.sizey - 1 downto 0 do begin
+  for i := membmp^.sizey - 1 downto 0 do begin
    byte((tempbuf + dofs)^) := 0; inc(dofs); // filter byte = lazy constant 0
-   for jvar := membmp^.sizex - 1 downto 0 do begin
+   for j := membmp^.sizex - 1 downto 0 do begin
     byte((tempbuf + dofs + 2)^) := byte((membmp^.image + iofs    )^); // blue
     byte((tempbuf + dofs + 1)^) := byte((membmp^.image + iofs + 1)^); // green
     byte((tempbuf + dofs    )^) := byte((membmp^.image + iofs + 2)^); // red
@@ -990,9 +999,9 @@ begin
  end else
  if membmp^.memformat = 1 then begin
   // 32-bit (in: BGRA; out: RGBA)
-  for ivar := membmp^.sizey - 1 downto 0 do begin
+  for i := membmp^.sizey - 1 downto 0 do begin
    byte((tempbuf + dofs)^) := 0; inc(dofs); // filter byte = lazy constant 0
-   for jvar := membmp^.sizex - 1 downto 0 do begin
+   for j := membmp^.sizex - 1 downto 0 do begin
     byte((tempbuf + dofs + 2)^) := byte((membmp^.image + iofs    )^); // blue
     byte((tempbuf + dofs + 1)^) := byte((membmp^.image + iofs + 1)^); // green
     byte((tempbuf + dofs    )^) := byte((membmp^.image + iofs + 2)^); // red
@@ -1002,7 +1011,7 @@ begin
   end;
  end else
   // Any-bit indexed
-  for ivar := membmp^.sizey - 1 downto 0 do begin
+  for i := membmp^.sizey - 1 downto 0 do begin
    byte((tempbuf + dofs)^) := 0; inc(dofs); // filter byte = lazy constant 0
    move((membmp^.image + iofs)^, (tempbuf + dofs)^, rowsize);
    inc(iofs, rowsize); inc(dofs, rowsize);
@@ -1010,9 +1019,9 @@ begin
 
  // Sic ZLib on the tempbuf^ image.
  z.next_in := NIL;
- longint(ivar) := DeflateInit(z, Z_DEFAULT_COMPRESSION);
- if longint(ivar) <> Z_OK then begin
-  mcg_errortxt := xlatezerror(longint(ivar));
+ longint(i) := DeflateInit(z, Z_DEFAULT_COMPRESSION);
+ if longint(i) <> Z_OK then begin
+  mcg_errortxt := xlatezerror(longint(i));
   freemem(tempbuf); tempbuf := NIL; freemem(poku); poku := NIL; exit;
  end;
  z.next_in := tempbuf;
@@ -1021,30 +1030,30 @@ begin
  z.next_out := poku;
  z.avail_out := dword(psizu^) + 65536;
  z.total_out := 0;
- longint(ivar) := Deflate(z, z_finish);
+ longint(i) := Deflate(z, z_finish);
  dword(psizu^) := z.total_out;
  freemem(tempbuf); tempbuf := poku; poku := NIL;
  DeflateEnd(z);
- if longint(ivar) <> Z_STREAM_END then begin
-  mcg_errortxt := xlatezerror(longint(ivar));
+ if longint(i) <> Z_STREAM_END then begin
+  mcg_errortxt := xlatezerror(longint(i));
   freemem(tempbuf); tempbuf := NIL; exit;
  end;
 
  // Calculate the CRC table for PNG creation, if not yet calculated.
  if CRCundone then begin
-  for ivar := 0 to 255 do begin
-   CRC := ivar;
-   for jvar := 0 to 7 do
+  for i := 0 to 255 do begin
+   CRC := i;
+   for j := 0 to 7 do
     if CRC and 1 <> 0 then CRC := $EDB88320 xor (CRC shr 1)
     else CRC := CRC shr 1;
-   CRCtable[ivar] := CRC;
+   CRCtable[i] := CRC;
   end;
   CRCundone := FALSE;
  end;
 
  // Reserve memory.
- ivar := dword(psizu^) + dword(length(membmp^.palette)) * 4 + 65536;
- pointer(p^) := NIL; getmem(pointer(p^), ivar);
+ i := dword(psizu^) + dword(length(membmp^.palette)) * 4 + 65536;
+ pointer(p^) := NIL; getmem(pointer(p^), i);
  poku := pointer(p^);
 
  // PNG signature.
@@ -1079,12 +1088,12 @@ begin
 
  // PLTE
  if membmp^.memformat and 4 <> 0 then begin
-  ivar := length(membmp^.palette); if ivar > 256 then ivar := 256;
-  dword(poku^) := swapendian(dword(ivar * 3)); inc(poku, 4); // pal.length
+  i := length(membmp^.palette); if i > 256 then i := 256;
+  dword(poku^) := swapendian(dword(i * 3)); inc(poku, 4); // pal.length
   iofs := poku - pointer(p^); // store the offset of CRC start
   dword(poku^) := $45544C50; inc(poku, 4); // pal.signature
   dofs := 0;
-  while dofs < ivar do begin
+  while dofs < i do begin
    byte(poku^) := membmp^.palette[dofs].r; inc(poku);
    byte(poku^) := membmp^.palette[dofs].g; inc(poku);
    byte(poku^) := membmp^.palette[dofs].b; inc(poku);
@@ -1100,12 +1109,12 @@ begin
 
  // tRNS
  if membmp^.memformat = 5 then begin
-  ivar := length(membmp^.palette); if ivar > 256 then ivar := 256;
-  dword(poku^) := swapendian(ivar); inc(poku, 4); // transparency.length
+  i := length(membmp^.palette); if i > 256 then i := 256;
+  dword(poku^) := swapendian(i); inc(poku, 4); // transparency.length
   iofs := poku - pointer(p^); // store the offset of CRC start
   dword(poku^) := $534E5274; inc(poku, 4); // transparency.signature
   dofs := 0;
-  while dofs < ivar do begin
+  while dofs < i do begin
    byte(poku^) := membmp^.palette[dofs].a;
    inc(poku); inc(dofs);
   end;
@@ -1599,7 +1608,7 @@ procedure mcg_EPScale32(poku : pbitmaptype; tox, toy : word);
 // Downscaling images with this will not give optimal results, since this
 // does not stack values over pixel spans.
 var processor, target : pointer;
-    loopx, loopy : word;
+    loopx, loopy : dword;
     source, ysource : dword;
     x1, y1, r1, g1, b1, a1, stacksize, diff : dword;
     cr, cg, cb, ca, r2, g2, b2, a2 : byte;
@@ -1688,7 +1697,7 @@ procedure mcg_EPScale24(poku : pbitmaptype; tox, toy : word);
 // Downscaling images with this will not give optimal results, since this
 // does not stack values over pixel spans.
 var processor, target : pointer;
-    loopx, loopy : word;
+    loopx, loopy : dword;
     source, ysource : dword;
     x1, y1, r1, g1, b1, stacksize, diff : dword;
     cr, cg, cb, r2, g2, b2 : byte;
@@ -1768,7 +1777,7 @@ procedure mcg_ScaleBitmapCos32(poku : pbitmaptype; tox, toy : word);
 // Downscaling images with this will not give optimal results, since this
 // does not stack values over pixel spans.
 var processor, target : pointer;
-    loopx, loopy : word;
+    loopx, loopy : dword;
     ysource, source : dword;
     x1, y1, r1, r2, g1, g2, b1, b2, a1, a2, p1, p2 : dword;
     cos1, cos2 : byte;
@@ -1832,7 +1841,7 @@ procedure mcg_ScaleBitmapCos24(poku : pbitmaptype; tox, toy : word);
 // Downscaling images with this will not give optimal results, since this
 // does not stack values over pixel spans.
 var processor, target : pointer;
-    loopx, loopy : word;
+    loopx, loopy : dword;
     source, ysource : dword;
     x1, y1, r1, r2, g1, g2, b1, b2 : dword;
     cos1, cos2 : byte;
@@ -2270,7 +2279,7 @@ end;
 // ------------------------------------------------------------------
 
 procedure doinits;
-var ivar, jvar : dword;
+var i, j : dword;
 begin
  fillbyte(pnghdr, sizeof(pnghdr), 0);
  CRCundone := TRUE;
@@ -2281,12 +2290,12 @@ begin
 
  // Pre-calculate the reverse gamma-correction table.
  setlength(mcg_RevGammaTab, 65536);
- jvar := 254;
- for ivar := 65535 downto 0 do begin
-  if ivar < mcg_GammaTab[jvar] then dec(jvar);
-  if mcg_GammaTab[jvar + 1] - ivar < ivar - mcg_GammaTab[jvar]
-  then mcg_RevGammaTab[ivar] := jvar + 1
-  else mcg_RevGammaTab[ivar] := jvar;
+ j := 254;
+ for i := 65535 downto 0 do begin
+  if i < mcg_GammaTab[j] then dec(j);
+  if mcg_GammaTab[j + 1] - i < i - mcg_GammaTab[j]
+  then mcg_RevGammaTab[i] := j + 1
+  else mcg_RevGammaTab[i] := j;
  end;
 end;
 
