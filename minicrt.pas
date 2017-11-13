@@ -819,14 +819,14 @@ var GetConsoleScreenBufferInfoEx : function(hConsoleOutput : HANDLE; lpConsoleSc
     libhandle : HANDLE;
     txt : widestring;
     procname : string;
-    ivar : UINT;
+    i : UINT;
 begin
  libhandle := 0;
  setlength(txt, MAX_PATH);
  // To load a system dll, we first need the system directory.
- ivar := GetSystemDirectoryW(@txt[1], MAX_PATH);
- if ivar <> 0 then begin
-  setlength(txt, ivar);
+ i := GetSystemDirectoryW(@txt[1], MAX_PATH);
+ if i <> 0 then begin
+  setlength(txt, i);
   txt := txt + '\kernel32.dll' + chr(0);
   // Try to load the library.
   libhandle := LoadLibraryW(@txt[1]);
@@ -840,10 +840,10 @@ begin
     // Try to fetch the extended console information using the new function.
     if GetConsoleScreenBufferInfoEx(StdOutH, @conbufinfo) then begin
      // Got it! Distribute the palette colors into crtpalette[].
-     for ivar := 0 to $F do begin
-      crtpalette[ivar].r := conbufinfo.ColorTable[ivar] and $FF;
-      crtpalette[ivar].g := (conbufinfo.ColorTable[ivar] shr 8) and $FF;
-      crtpalette[ivar].b := (conbufinfo.ColorTable[ivar] shr 16) and $FF;
+     for i := 0 to $F do begin
+      crtpalette[i].r := conbufinfo.ColorTable[i] and $FF;
+      crtpalette[i].g := (conbufinfo.ColorTable[i] shr 8) and $FF;
+      crtpalette[i].b := (conbufinfo.ColorTable[i] shr 16) and $FF;
      end;
     end;
    end;
@@ -1076,14 +1076,14 @@ procedure GetConsolePalette;
    end;
   end;
 
-var ivar : dword;
+var i : dword;
 begin
  // Flush stdin.
  KeyPressed;
  // Request palette 0.
  if ansigetcolor(0) then
  // If that worked, request the other colors.
- for ivar := 1 to 15 do ansigetcolor(ivar);
+ for i := 1 to 15 do ansigetcolor(i);
 end;
 
 {$HINTS OFF} // fpc complains about the parameters being unused...
