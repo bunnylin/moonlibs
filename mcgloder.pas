@@ -191,8 +191,8 @@ const mcg_GammaTab : array[0..255] of word = (
 implementation
 
 type RGBtriplet = packed record
-                   b, g, r : byte;
-                  end;
+       b, g, r : byte;
+     end;
      RGBarray = array[0..$FFFFFF] of RGBtriplet;
 
 const allowdiff = 4; // if < 2 then change var calc to a word
@@ -201,24 +201,24 @@ var //sspat : array[0..$FF] of array[0..3] of byte;
     CRC : dword;
     CRCundone : boolean;
     pnghdr : packed record
-              streamlength : dword;
-              bitdepth, colortype, compression, filter, interlace : byte;
-             end;
+      streamlength : dword;
+      bitdepth, colortype, compression, filter, interlace : byte;
+    end;
 
 function xlatezerror(incode : longint) : string;
 // Writes a ZLib error code into an informative string.
 begin
  case incode of
-  0: xlatezerror := 'ZLib errorcode Z_OK is not an error, you should never see this.';
-  1: xlatezerror := 'ZLib errorcode Z_STREAM_END is not an error, you should never see this.';
-  2: xlatezerror := 'ZLib errorcode Z_NEED_DICT is not an error, you should never see this.';
-  -1: xlatezerror := 'ZLib error -1: Z_ERRNO';
-  -2: xlatezerror := 'ZLib error -2: Z_STREAM_ERROR';
-  -3: xlatezerror := 'ZLib error -3: Z_DATA_ERROR';
-  -4: xlatezerror := 'ZLib error -4: Z_MEM_ERROR';
-  -5: xlatezerror := 'ZLib error -5: Z_BUF_ERROR';
-  -6: xlatezerror := 'ZLib error -6: Z_VERSION_ERROR';
-  else xlatezerror := 'Unknown ZLib error' + strdec(incode) + '!';
+   0: xlatezerror := 'ZLib errorcode Z_OK is not an error, you should never see this.';
+   1: xlatezerror := 'ZLib errorcode Z_STREAM_END is not an error, you should never see this.';
+   2: xlatezerror := 'ZLib errorcode Z_NEED_DICT is not an error, you should never see this.';
+   -1: xlatezerror := 'ZLib error -1: Z_ERRNO';
+   -2: xlatezerror := 'ZLib error -2: Z_STREAM_ERROR';
+   -3: xlatezerror := 'ZLib error -3: Z_DATA_ERROR';
+   -4: xlatezerror := 'ZLib error -4: Z_MEM_ERROR';
+   -5: xlatezerror := 'ZLib error -5: Z_BUF_ERROR';
+   -6: xlatezerror := 'ZLib error -6: Z_VERSION_ERROR';
+   else xlatezerror := 'Unknown ZLib error' + strdec(incode) + '!';
  end;
 end;
 
@@ -402,25 +402,25 @@ begin
 
  bytesperpixel := 1;
  case pnghdr.colortype of
-  2: begin // truecolor
-      whither^.memformat := 0;
-      bytesperpixel := 3;
-     end;
-  0: begin // monochrome
-      whither^.memformat := 2;
-     end;
-  3: begin // indexed color
-      whither^.memformat := 4;
-     end;
-  55: begin // indexed color that has alpha values in the palette
-      whither^.memformat := 5;
-     end;
-  6: begin // truecolor with alpha channel
-      whither^.memformat := 1;
-      bytesperpixel := 4;
-     end;
-  4: mcg_errortxt := 'Greyscale PNGs with full alpha are not supported.';
-  else mcg_errortxt := 'Messed up colortype: ' + strdec(pnghdr.colortype);
+   2: begin // truecolor
+       whither^.memformat := 0;
+       bytesperpixel := 3;
+      end;
+   0: begin // monochrome
+       whither^.memformat := 2;
+      end;
+   3: begin // indexed color
+       whither^.memformat := 4;
+      end;
+   55: begin // indexed color that has alpha values in the palette
+       whither^.memformat := 5;
+      end;
+   6: begin // truecolor with alpha channel
+       whither^.memformat := 1;
+       bytesperpixel := 4;
+      end;
+   4: mcg_errortxt := 'Greyscale PNGs with full alpha are not supported.';
+   else mcg_errortxt := 'Messed up colortype: ' + strdec(pnghdr.colortype);
  end;
 
  whither^.bitdepth := pnghdr.bitdepth;
@@ -489,92 +489,94 @@ begin
 
   // Copy the row into the final image while applying a filter transform
   case rowfilter of
-   // No change, direct copy
-   0: begin
-       move(sofs^, dofs^, bytesperrow);
-       inc(sofs, bytesperrow);
-       inc(dofs, bytesperrow);
-      end;
-   // Subtraction filter
-   1: begin
-       // first pixel or byte: direct copy
-       move(sofs^, dofs^, bytesperpixel);
-       inc(sofs, bytesperpixel);
-       inc(dofs, bytesperpixel);
-
-       // rest of the row: add the previous pixel or byte to current
-       x := bytesperrow - bytesperpixel;
-       while x > 0 do begin
-        dec(x);
-        byte(dofs^) := byte(byte(sofs^) + byte((dofs - bytesperpixel)^));
-        inc(sofs); inc(dofs);
+    // No change, direct copy
+    0: begin
+        move(sofs^, dofs^, bytesperrow);
+        inc(sofs, bytesperrow);
+        inc(dofs, bytesperrow);
        end;
-      end;
-   // Up filter
-   2: begin
-       // add each byte from above row to current row
-       for x := bytesperrow - 1 downto 0 do begin
-        byte(dofs^) := byte(byte(sofs^) + byte((dofs - bytesperrow)^));
-        inc(sofs); inc(dofs);
+    // Subtraction filter
+    1: begin
+        // first pixel or byte: direct copy
+        move(sofs^, dofs^, bytesperpixel);
+        inc(sofs, bytesperpixel);
+        inc(dofs, bytesperpixel);
+
+        // rest of the row: add the previous pixel or byte to current
+        x := bytesperrow - bytesperpixel;
+        while x > 0 do begin
+         dec(x);
+         byte(dofs^) := byte(byte(sofs^) + byte((dofs - bytesperpixel)^));
+         inc(sofs); inc(dofs);
+        end;
        end;
-      end;
-   // Average filter
-   3: begin
-       // first pixel or byte: add half of above pixel or byte to current
-       for x := 1 to bytesperpixel do begin
-        byte(dofs^) := byte(byte(sofs^) + byte((dofs - bytesperrow)^) shr 1);
-        inc(sofs); inc(dofs);
+    // Up filter
+    2: begin
+        // add each byte from above row to current row
+        for x := bytesperrow - 1 downto 0 do begin
+         byte(dofs^) := byte(byte(sofs^) + byte((dofs - bytesperrow)^));
+         inc(sofs); inc(dofs);
+        end;
        end;
+    // Average filter
+    3: begin
+        // first pixel or byte: add half of above pixel or byte to current
+        for x := 1 to bytesperpixel do begin
+         byte(dofs^) := byte(byte(sofs^) + byte((dofs - bytesperrow)^) shr 1);
+         inc(sofs); inc(dofs);
+        end;
 
-       // rest of the row: add to the current location the average of the
-       // previous and above pixel or byte
-       x := bytesperrow - bytesperpixel;
-       while x > 0 do begin
-        dec(x);
-        byte(dofs^) := byte(byte(sofs^) + (byte((dofs - bytesperpixel)^) + byte((dofs - bytesperrow)^)) shr 1);
-        inc(sofs); inc(dofs);
+        // rest of the row: add to the current location the average of the
+        // previous and above pixel or byte
+        x := bytesperrow - bytesperpixel;
+        while x > 0 do begin
+         dec(x);
+         byte(dofs^) := byte(byte(sofs^) + (byte((dofs - bytesperpixel)^) + byte((dofs - bytesperrow)^)) shr 1);
+         inc(sofs); inc(dofs);
+        end;
        end;
-      end;
-   // Paeth filter
-   4: begin
-       // a = byte or pixel before current
-       // b = byte or pixel above current
-       // c = byte or pixel above a
+    // Paeth filter
+    4: begin
+        // a = byte or pixel before current
+        // b = byte or pixel above current
+        // c = byte or pixel above a
 
-       // first pixel or byte: add Paeth(0, b, 0) to current
-       x := bytesperpixel;
-       while x > 0 do begin
-        dec(x);
-        jvar := byte((dofs - bytesperrow)^); // b
-        if jvar = 0
-        then byte(dofs^) := byte(sofs^) // add 0
-        else byte(dofs^) := byte(byte(sofs^) + jvar); // add b
+        // first pixel or byte: add Paeth(0, b, 0) to current
+        x := bytesperpixel;
+        while x > 0 do begin
+         dec(x);
+         jvar := byte((dofs - bytesperrow)^); // b
+         if jvar = 0
+         then byte(dofs^) := byte(sofs^) // add 0
+         else byte(dofs^) := byte(byte(sofs^) + jvar); // add b
 
-        inc(sofs); inc(dofs);
+         inc(sofs); inc(dofs);
+        end;
+
+        // rest of the row: add Paeth(a, b, c) to current
+        x := bytesperrow - bytesperpixel;
+        while x > 0 do begin
+         dec(x);
+         ivar := byte((dofs - bytesperpixel)^); // a
+         jvar := byte((dofs - bytesperrow)^); // b
+         kvar := byte((dofs - bytesperrow - bytesperpixel)^); // c
+         // (the below longint cast avoids arithmetic overflow on linux64...)
+         lvar := longint(ivar + jvar) - kvar; // p = a + b - c
+         ivar := abs(lvar - ivar); // pa = abs(p - a)
+         jvar := abs(lvar - jvar); // pb = abs(p - b)
+         kvar := abs(lvar - kvar); // pc = abs(p - c)
+
+         if (ivar <= jvar) and (ivar <= kvar)
+         // add a
+         then byte(dofs^) := byte(byte(sofs^) + byte((dofs - bytesperpixel)^))
+         else if jvar <= kvar
+         // add b
+         then byte(dofs^) := byte(byte(sofs^) + byte((dofs - bytesperrow)^))
+         else byte(dofs^) := byte(byte(sofs^) + byte((dofs - bytesperrow - bytesperpixel)^));
+
+         inc(sofs); inc(dofs);
+        end;
        end;
-
-       // rest of the row: add Paeth(a, b, c) to current
-       x := bytesperrow - bytesperpixel;
-       while x > 0 do begin
-        dec(x);
-        ivar := byte((dofs - bytesperpixel)^); // a
-        jvar := byte((dofs - bytesperrow)^); // b
-        kvar := byte((dofs - bytesperrow - bytesperpixel)^); // c
-        // (the below longint cast avoids arithmetic overflow on linux64...)
-        lvar := longint(ivar + jvar) - kvar; // p = a + b - c
-        ivar := abs(lvar - ivar); // pa = abs(p - a)
-        jvar := abs(lvar - jvar); // pb = abs(p - b)
-        kvar := abs(lvar - kvar); // pc = abs(p - c)
-
-        if (ivar <= jvar) and (ivar <= kvar)
-        then byte(dofs^) := byte(byte(sofs^) + byte((dofs - bytesperpixel)^)) // add a
-        else if jvar <= kvar
-        then byte(dofs^) := byte(byte(sofs^) + byte((dofs - bytesperrow)^)) // add b
-        else byte(dofs^) := byte(byte(sofs^) + byte((dofs - bytesperrow - bytesperpixel)^));
-
-        inc(sofs); inc(dofs);
-       end;
-      end;
   end;
  end;
 
@@ -601,8 +603,8 @@ begin
 
  // Make sure the image will be in 24-bit RGB or 32-bit RGBA format.
  case mcg_AutoConvert of
-  1: mcg_ExpandBitdepth(whither);
-  2: mcg_ExpandIndexed(whither);
+   1: mcg_ExpandBitdepth(whither);
+   2: mcg_ExpandIndexed(whither);
  end;
 
  openping := 0;
@@ -652,56 +654,56 @@ begin
   if readp + chunklen >= pend then break;
 
   case chunktype of
-   // IHDR
-   $52444849:
-   begin
-    headerfound := TRUE;
-    membmp^.sizex := swapendian(dword(readp^));
-    membmp^.sizey := swapendian(dword((readp + 4)^));
-    pnghdr.bitdepth := byte((readp + 8)^);
-    pnghdr.colortype := byte((readp + 9)^);
-    pnghdr.compression := byte((readp + 10)^);
-    pnghdr.filter := byte((readp + 11)^);
-    pnghdr.interlace := byte((readp + 12)^);
-    pnghdr.streamlength := 0;
-   end;
-   // PLTE
-   $45544C50:
-   begin
-    konkeli := chunklen div 3;
-    setlength(membmp^.palette, konkeli);
-    while konkeli <> 0 do begin
-     dec(konkeli);
-     membmp^.palette[konkeli].r := byte((readp + konkeli * 3)^);
-     membmp^.palette[konkeli].g := byte((readp + konkeli * 3 + 1)^);
-     membmp^.palette[konkeli].b := byte((readp + konkeli * 3 + 2)^);
-     membmp^.palette[konkeli].a := $FF;
+    // IHDR
+    $52444849:
+    begin
+     headerfound := TRUE;
+     membmp^.sizex := swapendian(dword(readp^));
+     membmp^.sizey := swapendian(dword((readp + 4)^));
+     pnghdr.bitdepth := byte((readp + 8)^);
+     pnghdr.colortype := byte((readp + 9)^);
+     pnghdr.compression := byte((readp + 10)^);
+     pnghdr.filter := byte((readp + 11)^);
+     pnghdr.interlace := byte((readp + 12)^);
+     pnghdr.streamlength := 0;
     end;
-   end;
-   // IDAT
-   $54414449:
-   begin
-    if mcg_ReadHeaderOnly = 0 then begin
-     if pnghdr.streamlength = 0
-     then getmem(whence, chunklen)
-     else reallocmem(whence, pnghdr.streamlength + chunklen);
-     move(readp^, (whence + pnghdr.streamlength)^, chunklen);
+    // PLTE
+    $45544C50:
+    begin
+     konkeli := chunklen div 3;
+     setlength(membmp^.palette, konkeli);
+     while konkeli <> 0 do begin
+      dec(konkeli);
+      membmp^.palette[konkeli].r := byte((readp + konkeli * 3)^);
+      membmp^.palette[konkeli].g := byte((readp + konkeli * 3 + 1)^);
+      membmp^.palette[konkeli].b := byte((readp + konkeli * 3 + 2)^);
+      membmp^.palette[konkeli].a := $FF;
+     end;
     end;
-    inc(pnghdr.streamlength, chunklen);
-   end;
-   // tRNS
-   $534E5274:
-   if pnghdr.colortype = 3 then begin
-    konkeli := chunklen;
-    if konkeli > dword(length(membmp^.palette)) then konkeli := length(membmp^.palette);
-    while konkeli <> 0 do begin
-     dec(konkeli);
-     membmp^.palette[konkeli].a := byte((readp + konkeli)^);
+    // IDAT
+    $54414449:
+    begin
+     if mcg_ReadHeaderOnly = 0 then begin
+      if pnghdr.streamlength = 0
+      then getmem(whence, chunklen)
+      else reallocmem(whence, pnghdr.streamlength + chunklen);
+      move(readp^, (whence + pnghdr.streamlength)^, chunklen);
+     end;
+     inc(pnghdr.streamlength, chunklen);
     end;
-    pnghdr.colortype := 55; // internal: indexed with valid alpha
-   end;
-   // IEND
-   $444E4549: break;
+    // tRNS
+    $534E5274:
+    if pnghdr.colortype = 3 then begin
+     konkeli := chunklen;
+     if konkeli > dword(length(membmp^.palette)) then konkeli := length(membmp^.palette);
+     while konkeli <> 0 do begin
+      dec(konkeli);
+      membmp^.palette[konkeli].a := byte((readp + konkeli)^);
+     end;
+     pnghdr.colortype := 55; // internal: indexed with valid alpha
+    end;
+    // IEND
+    $444E4549: break;
   end;
 
   // Move read pointer past this chunk's data, and skip the CRC dword.
@@ -809,16 +811,16 @@ begin
  // Bitdepths of 8 or below are an indexed image, and have a palette.
  // Bitdepths of 16-32 mean an RGB image without a palette.
  case membmp^.bitdepth of
-  1: begin membmp^.memformat := 4; palsize := 2; end;
-  2: begin membmp^.memformat := 4; palsize := 4; end; // unsupported by specs
-  4: begin membmp^.memformat := 4; palsize := 16; end;
-  8: begin membmp^.memformat := 4; palsize := 256; end;
-  // 16: meh; // if you ever come across one, I'll add support for it...
-  24: begin membmp^.memformat := 0; palsize := 0; end;
-  32: begin membmp^.memformat := 1; palsize := 0; end;
-  else begin
-   mcg_errortxt := 'Unsupported BMP bitdepth, ' + strdec(membmp^.bitdepth); exit;
-  end;
+   1: begin membmp^.memformat := 4; palsize := 2; end;
+   2: begin membmp^.memformat := 4; palsize := 4; end; // unsupported by specs
+   4: begin membmp^.memformat := 4; palsize := 16; end;
+   8: begin membmp^.memformat := 4; palsize := 256; end;
+   // 16: meh; // if you ever come across one, I'll add support for it...
+   24: begin membmp^.memformat := 0; palsize := 0; end;
+   32: begin membmp^.memformat := 1; palsize := 0; end;
+   else begin
+    mcg_errortxt := 'Unsupported BMP bitdepth, ' + strdec(membmp^.bitdepth); exit;
+   end;
  end;
 
  // If the colors used variable is nonzero, it defines the real palette size.
@@ -899,8 +901,8 @@ begin
 
  // Finally, AutoConvert the image format to 8 bpp and maybe even truecolor.
  case mcg_AutoConvert of
-  1: mcg_ExpandBitdepth(membmp);
-  2: mcg_ExpandIndexed(membmp);
+   1: mcg_ExpandBitdepth(membmp);
+   2: mcg_ExpandIndexed(membmp);
  end;
 
  mcg_BMPtoMemory := 0;
@@ -964,9 +966,9 @@ begin
  // Split the image into scanlines and theoretically filter it -> tempbuf^
  rowsize := 0;
  case membmp^.memformat of
-  0: rowsize := membmp^.sizex * 3;
-  1: rowsize := membmp^.sizex * 4;
-  2,4,5: rowsize := (membmp^.sizex * membmp^.bitdepth + 7) div 8;
+   0: rowsize := membmp^.sizex * 3;
+   1: rowsize := membmp^.sizex * 4;
+   2,4,5: rowsize := (membmp^.sizex * membmp^.bitdepth + 7) div 8;
  end;
  dword(psizu^) := (rowsize + 1) * membmp^.sizey;
  getmem(tempbuf, dword(psizu^));
@@ -1056,10 +1058,10 @@ begin
  dword(poku^) := swapendian(dword(membmp^.sizey)); inc(poku, 4); // height
  byte(poku^) := membmp^.bitdepth; inc(poku); // header.bitdepth
  case membmp^.memformat of
-  0: byte(poku^) := 2; // truecolor
-  1: byte(poku^) := 6; // truecolor with alpha
-  2: byte(poku^) := 0; // greyscale
-  4,5: byte(poku^) := 3; // indexed-color
+   0: byte(poku^) := 2; // truecolor
+   1: byte(poku^) := 6; // truecolor with alpha
+   2: byte(poku^) := 0; // greyscale
+   4,5: byte(poku^) := 3; // indexed-color
  end; inc(poku); // header.colortype
  byte(poku^) := 0; inc(poku); // header.compressionmethod
  byte(poku^) := 0; inc(poku); // header.filtermethod
@@ -1881,11 +1883,11 @@ begin
  end;
 
  case poku^.memformat of
-  0: mcg_ScaleBitmapCos24(poku, tox, toy);
-  1: mcg_ScaleBitmapCos32(poku, tox, toy);
-  else begin
-        mcg_errortxt := 'Image memformat must be 0 or 1'; exit;
-       end;
+   0: mcg_ScaleBitmapCos24(poku, tox, toy);
+   1: mcg_ScaleBitmapCos32(poku, tox, toy);
+   else begin
+    mcg_errortxt := 'Image memformat must be 0 or 1'; exit;
+   end;
  end;
 end;
 
