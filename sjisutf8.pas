@@ -1010,34 +1010,36 @@ function GetUTF8(sjis : dword) : string;
 // Output: a string of 1-3 bytes, with this code point in UTF-8.
 //
 // If the input value is invalid, returns an empty string.
-var ivar : dword;
+var i : dword;
 begin
- ivar := 0;
+ i := 0;
 
  // -----------------------------------------------------------------
  // Single-byte encodings
  if sjis <= $FF then begin
   case sjis of
-    $20..$5B, $5D..$7D: ivar := sjis; // plain ASCII
-    $5C: ivar := $A5C2; // 0xC2A5, yen sign
-    $7E: ivar := $BE80E2; // 0xE280BE, overline
-    $A1..$BF: ivar := sjis shl 16 + $BDEF; // halfwidth katakana
-    $C0..$DF: ivar := sjis shl 16 - $3F4111; // more halfwidth katakana
+    $20..$5B, $5D..$7D: i := sjis; // plain ASCII
+    $5C: i := $A5C2; // 0xC2A5, yen sign
+    $7E: i := $BE80E2; // 0xE280BE, overline
+    $A1..$BF: i := sjis shl 16 + $BDEF; // halfwidth katakana
+    $C0..$DF: i := sjis shl 16 - $3F4111; // more halfwidth katakana
   end;
  end
 
  // -----------------------------------------------------------------
  // Double-byte encodings
- else if (sjis >= $E040) and (sjis <= $EAA4) then ivar := group3[sjis]
- else if (sjis >= $889F) and (sjis <= $9FFC) then ivar := group2[sjis]
- else if (sjis >= $8140) and (sjis <= $84BE) then ivar := group1[sjis]
+ else if (sjis >= $E040) and (sjis <= $EAA4) then i := group3[sjis]
+ else if (sjis >= $889F) and (sjis <= $9FFC) then i := group2[sjis]
+ else if (sjis >= $8140) and (sjis <= $84BE) then i := group1[sjis]
  ;
 
  byte(GetUTF8[0]) := 3;
- dword((@GetUTF8[1])^) := ivar;
- if ivar <= $FF then byte(GetUTF8[0]) := 1
- else if ivar <= $FFFF then byte(GetUTF8[0]) := 2;
+ dword((@GetUTF8[1])^) := i;
+ if i <= $FF then byte(GetUTF8[0]) := 1
+ else if i <= $FFFF then byte(GetUTF8[0]) := 2;
 end;
 
-begin
+// ------------------------------------------------------------------
+initialization
+finalization
 end.
