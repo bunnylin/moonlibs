@@ -108,6 +108,15 @@ begin
   loader.ofs := 8;
   assert(loader.ReadDword = a[2]);
 
+  // Verify zero-terminated stringreader.
+  loader.ofs := $C;
+  assert(loader.ReadString = chr(a[3] and $FF) + chr((a[3] shr 8) and $FF));
+  assert(loader.ofs = $E);
+  // Verify zero-terminated stringreader respects end of buffer.
+  loader.ofs := $F;
+  assert(loader.ReadString = chr(a[3] shr 24));
+  assert(loader.ofs = $10);
+
   // Verify zero-terminated stringreader with custom offset.
   loader.ofs := 3;
   assert(loader.ReadStringFrom($C) = chr(a[3] and $FF) + chr((a[3] shr 8) and $FF));

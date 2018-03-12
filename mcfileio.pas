@@ -33,6 +33,7 @@ type TFileLoader = class
     function ReadByte : byte; inline;
     function ReadWord : word; inline;
     function ReadDword : dword; inline;
+    function ReadString : UTF8string;
     function ReadByteFrom(readofs : ptruint) : byte; inline;
     function ReadWordFrom(readofs : ptruint) : word; inline;
     function ReadDwordFrom(readofs : ptruint) : dword; inline;
@@ -199,11 +200,27 @@ begin
  inc(readp, 4);
 end;
 
+function TFileLoader.ReadString : UTF8string;
+// Returns the next null-terminated string from buffy, advances read counter.
+// Does range checking. If the requested string goes beyond the buffer, cuts
+// the string at the buffer boundary.
+var lenp : pointer;
+    length : ptruint;
+begin
+ lenp := readp;
+ while (lenp < buffyendp) and (byte(lenp^) <> 0) do inc(lenp);
+ length := lenp - readp;
+
+ setlength(result, length);
+ if length <> 0 then move(readp^, result[1], length);
+ inc(readp, length);
+end;
+
 function TFileLoader.ReadByteFrom(readofs : ptruint) : byte; inline;
 // Returns a byte from the given offset in buffy. Does not advance read
 // counters, but throws an exception the read is out of bounds.
 begin
- if readofs >= buffysize then raise Exception.Create('ReadByteFrom out of bounds');
+ if readofs >= size then raise Exception.Create('ReadByteFrom out of bounds');
  result := byte((buffy + readofs)^);
 end;
 
@@ -211,7 +228,7 @@ function TFileLoader.ReadWordFrom(readofs : ptruint) : word; inline;
 // Returns the next word from buffy, advances read counter.
 // Range checking is the caller's responsibility.
 begin
- if readofs + 1 >= buffysize then raise Exception.Create('ReadWordFrom out of bounds');
+ if readofs + 1 >= size then raise Exception.Create('ReadWordFrom out of bounds');
  result := word((buffy + readofs)^);
 end;
 
@@ -219,7 +236,7 @@ function TFileLoader.ReadDwordFrom(readofs : ptruint) : dword; inline;
 // Returns the next dword from buffy, advances read counter.
 // Range checking is the caller's responsibility.
 begin
- if readofs + 3 >= buffysize then raise Exception.Create('ReadDwordFrom out of bounds');
+ if readofs + 3 >= size then raise Exception.Create('ReadDwordFrom out of bounds');
  result := dword((buffy + readofs)^);
 end;
 
