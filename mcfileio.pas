@@ -38,6 +38,7 @@ type TFileLoader = class
     function ReadWordFrom(readofs : ptruint) : word; inline;
     function ReadDwordFrom(readofs : ptruint) : dword; inline;
     function ReadStringFrom(readofs : ptruint) : UTF8string;
+    function PtrAt(writeofs : ptruint) : pointer;
 
   constructor Open(const filepath : UTF8string);
   destructor Destroy(); override;
@@ -254,6 +255,14 @@ begin
 
  setlength(result, length);
  if length <> 0 then move(startp^, result[1], length);
+end;
+
+function TFileLoader.PtrAt(writeofs : ptruint) : pointer;
+// Returns a pointer at the given offset in buffy. Does range checking.
+// If the requested offset is out of bounds, throws an exception.
+begin
+ if writeofs >= buffysize then raise Exception.Create('PtrAt out of bounds');
+ result := buffy + writeofs;
 end;
 
 procedure SaveFile(const filepath : UTF8string; buf : pointer; bufsize : ptruint);

@@ -132,6 +132,9 @@ begin
   // Verify buffy resize downward.
   loader.size := 6;
   assert(loader.ReadStringFrom(4) = chr(a[1] and $FF) + chr((a[1] shr 8) and $FF));
+  // Verify write pointer acquiry.
+  loader.ofs := 2;
+  assert(loader.ReadDword = dword(loader.PtrAt(2)^));
  finally
   {$I-}
   erase(f1); while IOresult <> 0 do ;
