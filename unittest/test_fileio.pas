@@ -82,6 +82,11 @@ begin
   assert(loader.ReadByte = byte(a[1] shr 16));
   assert(loader.ofs = 7);
 
+  assert(loader.ReadByteFrom(4) = byte(a[1]));
+  assert(loader.ReadWordFrom(4) = word(a[1]));
+  assert(loader.ReadDwordFrom(0) = a[0]);
+  assert(loader.ofs = 7);
+
   // Verify bitreader.
   j := 0;
   loader.bitindex := 7;
@@ -110,6 +115,14 @@ begin
   // Verify zero-terminated stringreader with custom offset respects end of
   // buffer.
   assert(loader.ReadStringFrom($F) = chr(a[3] shr 24));
+  // Verify buffy resize upward.
+  loader.size := 17;
+  loader.ofs := 0;
+  word((loader.readp + 15)^) := $ABCD;
+  assert(loader.ReadWordFrom(15) = $ABCD);
+  // Verify buffy resize downward.
+  loader.size := 6;
+  assert(loader.ReadStringFrom(4) = chr(a[1] and $FF) + chr((a[1] shr 8) and $FF));
  finally
   {$I-}
   erase(f1); while IOresult <> 0 do ;

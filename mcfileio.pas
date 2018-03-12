@@ -12,25 +12,31 @@ interface
 
 type TFileLoader = class
   private
-    buffy : pointer;
+    buffy, buffyendp : pointer;
+    buffysize : ptruint;
     m_filename : UTF8string;
     function GetOfs : ptruint;
     procedure SetOfs(newofs : ptruint);
+    procedure SetSize(newsize : ptruint);
 
   public
     property ofs : ptruint read GetOfs write SetOfs;
+    property size : ptruint read buffysize write SetSize;
+    property endp : pointer read buffyendp;
     property filename : UTF8string read m_filename;
 
   public
-    readp, endp : pointer;
-    size : ptruint;
+    readp : pointer;
     bitindex : byte; // 7 = top, 0 = bottom
 
     function ReadBit : boolean;
     function ReadByte : byte; inline;
     function ReadWord : word; inline;
     function ReadDword : dword; inline;
-    function ReadStringFrom(readofs : dword) : UTF8string;
+    function ReadByteFrom(readofs : ptruint) : byte; inline;
+    function ReadWordFrom(readofs : ptruint) : word; inline;
+    function ReadDwordFrom(readofs : ptruint) : dword; inline;
+    function ReadStringFrom(readofs : ptruint) : UTF8string;
 
   constructor Open(const filepath : UTF8string);
   destructor Destroy(); override;
@@ -86,7 +92,7 @@ var f : file;
 begin
  buffy := NIL;
  readp := NIL;
- endp := NIL;
+ buffyendp := NIL;
  m_filename := copy(filepath, 1);
 
  while IOresult <> 0 do; // flush
@@ -107,16 +113,16 @@ begin
  if i <> 0 then raise Exception.Create(errortxt(i) + ' opening ' + m_filename);
 
  // Load the entire file.
- size := filesize(f);
- getmem(buffy, size);
- blockread(f, buffy^, size);
+ buffysize := filesize(f);
+ getmem(buffy, buffysize);
+ blockread(f, buffy^, buffysize);
  i := IOresult;
  close(f);
  if i <> 0 then raise Exception.Create(errortxt(i) + ' reading ' + m_filename);
  while IOresult <> 0 do; // flush
 
  readp := buffy;
- endp := buffy + size;
+ buffyendp := buffy + buffysize;
 end;
 
 destructor TFileLoader.Destroy;
@@ -135,7 +141,23 @@ procedure TFileLoader.SetOfs(newofs : ptruint);
 // Sets the current read offset.
 begin
  readp := buffy + newofs;
- if readp > endp then readp := endp;
+ if readp > buffyendp then readp := buffyendp;
+end;
+
+procedure TFileLoader.SetSize(newsize : ptruint);
+// Adjusts the buffer size. If shrinking, doesn't touch the buffer, only
+// decreases endp. If growing, reallocates the whole thing (very slow). The
+// newly allocated bytes are not initialised.
+var i : ptruint;
+begin
+ if newsize > buffysize then begin
+  i := ofs;
+  reallocmem(buffy, newsize);
+  readp := buffy + i;
+ end;
+ buffysize := newsize;
+ buffyendp := buffy + buffysize;
+ if readp > buffyendp then readp := buffyendp;
 end;
 
 function TFileLoader.ReadBit : boolean;
@@ -177,7 +199,31 @@ begin
  inc(readp, 4);
 end;
 
-function TFileLoader.ReadStringFrom(readofs : dword) : UTF8string;
+function TFileLoader.ReadByteFrom(readofs : ptruint) : byte; inline;
+// Returns a byte from the given offset in buffy. Does not advance read
+// counters, but throws an exception the read is out of bounds.
+begin
+ if readofs >= buffysize then raise Exception.Create('ReadByteFrom out of bounds');
+ result := byte((buffy + readofs)^);
+end;
+
+function TFileLoader.ReadWordFrom(readofs : ptruint) : word; inline;
+// Returns the next word from buffy, advances read counter.
+// Range checking is the caller's responsibility.
+begin
+ if readofs + 1 >= buffysize then raise Exception.Create('ReadWordFrom out of bounds');
+ result := word((buffy + readofs)^);
+end;
+
+function TFileLoader.ReadDwordFrom(readofs : ptruint) : dword; inline;
+// Returns the next dword from buffy, advances read counter.
+// Range checking is the caller's responsibility.
+begin
+ if readofs + 3 >= buffysize then raise Exception.Create('ReadDwordFrom out of bounds');
+ result := dword((buffy + readofs)^);
+end;
+
+function TFileLoader.ReadStringFrom(readofs : ptruint) : UTF8string;
 // Returns a null-terminated string from the given offset in buffy.
 // Does not advance read counters, but does range checking. If the requested
 // string goes beyond the buffer, cuts the string at the buffer boundary.
@@ -186,7 +232,7 @@ var startp, lenp : pointer;
 begin
  startp := buffy + readofs;
  lenp := startp;
- while (lenp < endp) and (byte(lenp^) <> 0) do inc(lenp);
+ while (lenp < buffyendp) and (byte(lenp^) <> 0) do inc(lenp);
  length := lenp - startp;
 
  setlength(result, length);
