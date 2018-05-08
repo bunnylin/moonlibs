@@ -121,7 +121,6 @@ begin
  i := IOresult;
  close(f);
  if i <> 0 then raise Exception.Create(errortxt(i) + ' reading ' + m_filename);
- while IOresult <> 0 do; // flush
 
  readp := buffy;
  buffyendp := buffy + buffysize;
