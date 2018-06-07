@@ -1,6 +1,8 @@
 Moonlibs
 ========
 
+Now available at https://gitlab.com/bunnylin/moonlibs
+
 This is a set of possibly useful Free Pascal units.
 
 minicrt
